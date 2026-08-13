@@ -27,7 +27,8 @@ class ConnectionManager:
             await self._redis.aclose()
 
     async def connect(self, websocket: WebSocket, project_id: int) -> None:
-        await websocket.accept()
+        # 假设调用方（ws_data 端点）已经 accept；这里只注册到内存映射。
+        # 实际 accept 由 ws_data 在 token 校验通过后统一调用（单一入口）。
         self.active_connections[project_id].append(websocket)
 
     async def disconnect(self, websocket: WebSocket, project_id: int) -> None:

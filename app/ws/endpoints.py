@@ -26,6 +26,9 @@ async def ws_data(websocket: WebSocket, token: str = "") -> None:
         await websocket.close(code=4401)
         return
 
+    # 先完成握手，再进入接收循环（前端反馈：之前从未 accept 导致 500）
+    await websocket.accept()
+
     subscribed_project: int | None = None
     try:
         while True:
