@@ -45,11 +45,16 @@ services:
   api:
     build: .
     container_name: shm-api
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    entrypoint: ["sh", "/app/docker/entrypoint.sh"]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://shm_user:shm_pass@postgres:5432/shm_db
       REDIS_URL: redis://redis:6379/0
+      # ADMIN_USERNAME + ADMIN_PASSWORD（可选）：自动创建首个 admin。
+      # 生产建议用 Docker Secrets / Vault 注入，不直接写在 compose 文件里。
+      # ADMIN_USERNAME:
+      # ADMIN_PASSWORD:
     ports:
       - "8000:8000"
     depends_on:

@@ -3,7 +3,7 @@
 审查范围：最近三次提交
 
 - `121069ea` feat: protocol adapters v0.3.0
-- `dd3a9f7b` feat: analysis task pipeline v0.5.0
+- `dd3a9f7b` feat: analysis task pipeline v0.6.0
 - `dcc27d21` fix(ws): accept handshake before receive_text
 
 图例：🔴 Critical ｜ 🟠 Major ｜ 🟡 Minor ｜ ⚪ Nit

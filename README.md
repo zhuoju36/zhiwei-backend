@@ -1,7 +1,7 @@
 # SHM 平台后端
 
 > 结构健康监测（Structural Health Monitoring）平台后端服务
-> 版本：**0.4.0** · 文档同步于 2026-08-13
+> 版本：**0.6.0** · 文档同步于 2026-08-13
 
 面向建筑结构监测场景，提供三维数字孪生所需的实时数据底座、多协议设备接入、高频时序数据治理与可扩展的分析引擎。全异步架构，基于 FastAPI + TimescaleDB + Redis。
 
@@ -40,18 +40,21 @@ uv pip install -r requirements.txt -i https://mirrors.ustc.edu.cn/pypi/simple
 # 2. 启动基础设施
 docker compose up -d postgres redis minio
 
-# 3. 应用数据库迁移 + TimescaleDB 初始化 + 种子数据
+# 3. 应用数据库迁移 + TimescaleDB 初始化
 cp .env.example .env
 .venv/bin/alembic upgrade head
 .venv/bin/python -m scripts.init_db
-.venv/bin/python -m scripts.seed
 
 # 4. 启动 API
 .venv/bin/python -m uvicorn app.main:app --reload
 # 浏览 http://localhost:8000/docs 看交互式 API 文档
+
+# 5. 首次部署引导：创建第一个 admin（users 表为空时生效）
+.venv/bin/python -m scripts.init_admin --base-url http://localhost:8000
+# 完成后使用 admin/<your-password> 登录
 ```
 
-种子数据：管理员 `admin` / `admin123456`，演示项目、网关 `GW-001`、测点 `ACC-X`。
+Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 环境变量，entrypoint 会自动调 `init_admin.py`（生产推荐用 Docker Secrets）。
 
 ## 文档导航
 
@@ -77,24 +80,17 @@ cp .env.example .env
   - [大屏](docs/api/dashboard.md)
   - [分析](docs/api/analysis.md)
   - [通知](docs/api/notifications.md)
+  - [首次部署引导（setup）](docs/api/setup.md)
 
 ## 项目状态
 
-`v0.5.0` — 在 `v0.4.0` 基础上补齐 WS 安全 + 告警抑制 + 多渠道通知：
+`v0.6.0` — 在 `v0.5.0` 基础上补齐**首次部署引导**：
 
-- **WS 项目权限校验**：v0.1 遗留的 TODO 修复（`/ws/data` 在 `cmd:subscribe` 时强制 `check_project_access`，失败发送 `cmd:error` 4003 而非直接 4401）
-- **告警抑制**：`AlertRule.suppress_seconds`（默认 60）控制窗口；窗口内再次触发复用最近一条已关闭告警（重开），避免 chattering
-- **多渠道通知**：Webhook + Email 两个全局通道（env 配置），告警新建/重开时并发派发，失败隔离
-- 新增 `app/notifications/` 子系统（base + webhook + email + dispatch）
-- `trigger_alert` 替代 v0.2 `upsert_alert`（向后兼容 `upsert_alert` 别名）
+- 后端 `GET/POST /api/v1/setup/*` 端点（无认证 + 严格 `users` 表空守卫）：前端 setup 页面或 CLI 创建首个 admin
+- 密码策略：≥8 字符 + 至少一个字母 + 一个数字（Pydantic schema + service 双重校验）
+- `scripts/init_admin.py` 替换 `scripts/seed.py`（已删除）：交互 / env 双模式，幂等
+- `docker/entrypoint.sh` + compose 改 entrypoint：env 传入 `ADMIN_USERNAME`/`ADMIN_PASSWORD` 时自动 init
 
-- `modbus_tcp` 适配器（pymodbus）：6 种 data_type 解码，单点错误隔离
-- `mqtt` 适配器（aiomqtt）：后台订阅协程 + 队列 + JSON payload 容错
-- 服务器端 `GET /api/v1/protocols` 元数据接口
-- `POST /api/v1/devices` 校验 `protocol` 必须是已注册名
-- 三套模拟器脚本：`modbus_simulator.py` / `mqtt_injector.py` / `simulate_data.py`
-- 边缘网关参考脚本 `scripts/run_edge_adapter.py`
+`v0.5.0` 之前的累计能力：WS 项目权限校验、告警抑制（per-rule suppress_seconds）、多渠道通知（Webhook + Email）、modbus_tcp/mqtt 协议适配器、FFT 分析 + Celery `analysis` + MinIO、JWT 认证、阈值告警 + WebSocket 推送、TimescaleDB hypertable + 连续聚合。
 
-`v0.2.0` 之前的累计能力：JWT 认证、项目/设备/测点/告警/大屏 CRUD、阈值评估 + Celery `alerts` 队列 + WS 实时推送、TimescaleDB hypertable + 连续聚合。
-
-尚未实现：modbus_rtu（串口）、opcua、3D 模型上传、FFT/趋势预测分析插件、多渠道通知（邮件/钉钉/企微）。这些模块在后续迭代按 AGENTS.md 规划补全。
+尚未实现：每项目通知通道配置（v0.7+）、钉钉/企微/Slack 专属 payload、modbus_rtu/opcua 适配器、3D 模型上传、模态/趋势预测分析插件、首次登录强制改密码、zxcvbn 密码强度评分、完整边缘网关进程、审计日志。

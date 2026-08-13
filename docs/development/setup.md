@@ -1,6 +1,6 @@
 # 开发环境
 
-> SHM 平台后端 v0.5.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.6.0 · 更新于 2026-08-13
 
 ## 1. 工具要求
 
@@ -31,14 +31,16 @@ docker compose up -d postgres redis minio
 docker inspect -f '{{.State.Health.Status}}' shm-postgres
 # healthy 后继续
 
-# 应用迁移 + TimescaleDB 初始化 + 种子数据
+# 应用迁移 + TimescaleDB 初始化
 cp .env.example .env
 .venv/bin/alembic upgrade head
 .venv/bin/python -m scripts.init_db
-.venv/bin/python -m scripts.seed
 
-# 启动 API（开发模式）
+# 启动 API（开发模式；首个进程会暴露 setup 端点）
 .venv/bin/python -m uvicorn app.main:app --reload
+
+# 首次部署引导：创建第一个 admin（首次跑、users 表为空时生效）
+.venv/bin/python -m scripts.init_admin --base-url http://localhost:8000
 ```
 
 启动后访问：
@@ -106,7 +108,7 @@ docker compose down -v               # 停止并清理卷（数据丢失）
 
 # 工具脚本
 .venv/bin/python -m scripts.init_db         # TimescaleDB 初始化（幂等）
-.venv/bin/python -m scripts.seed            # 种子数据
+.venv/bin/python -m scripts.init_admin      # 首次部署创建 admin（交互/非交互）
 
 # 代码质量
 .venv/bin/ruff check --fix .
