@@ -1,6 +1,6 @@
 # 文档目录
 
-> SHM 平台后端 v0.2.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.3.0 · 更新于 2026-08-13
 
 ## 开发者文档
 
@@ -12,6 +12,7 @@
 | [development/modules.md](development/modules.md) | `app/` 各子模块的技术细节：职责、关键类、调用关系 |
 | [development/coding-standards.md](development/coding-standards.md) | 异步铁律、Pydantic / SQLAlchemy 用法、错误处理、提交前检查清单 |
 | [development/testing.md](development/testing.md) | 测试分层、pytest 约定、fixture、集成测试数据库策略 |
+| [development/simulation.md](development/simulation.md) | 无硬件模拟器使用指南（modbus_simulator / mqtt_injector / simulate_data） |
 | [development/deployment.md](development/deployment.md) | Docker 镜像、Compose 服务清单、生产环境建议 |
 
 ## API 文档（使用者）
@@ -23,6 +24,7 @@
 | [api/projects.md](api/projects.md) | 项目 CRUD 与用户授权 |
 | [api/devices.md](api/devices.md) | 设备 CRUD |
 | [api/points.md](api/points.md) | 测点 CRUD、alert_rules 字段语义 |
+| [api/protocols.md](api/protocols.md) | 协议元数据 + 各协议 config schema |
 | [api/data.md](api/data.md) | 时序数据批量接入、查询、最新值、WebSocket 订阅、告警事件 |
 | [api/alerts.md](api/alerts.md) | 告警列表 / 详情 / 确认 |
 | [api/dashboard.md](api/dashboard.md) | 大屏聚合统计与最近告警 |

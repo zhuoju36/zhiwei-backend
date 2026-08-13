@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import BizException
 from app.models.device import Device
 from app.models.project import Project
+from app.plugins.protocols.registry import AdapterRegistry
 from app.schemas.device import DeviceCreate, DeviceUpdate
 
 
@@ -45,6 +46,12 @@ class DeviceService:
     async def create(db: AsyncSession, payload: DeviceCreate) -> Device:
         if await db.get(Project, payload.project_id) is None:
             raise BizException(code="PROJECT_NOT_FOUND", message="项目不存在", status_code=404)
+        if payload.protocol not in AdapterRegistry.names():
+            raise BizException(
+                code="PROTOCOL_NOT_REGISTERED",
+                message=f"未注册的协议: {payload.protocol}；可用: {AdapterRegistry.names()}",
+                status_code=422,
+            )
         # 唯一性：device_code 全局唯一（与数据库约束一致）
         existing = (
             await db.execute(select(Device).where(Device.device_code == payload.device_code))
@@ -65,7 +72,14 @@ class DeviceService:
     @staticmethod
     async def update(db: AsyncSession, device_id: int, payload: DeviceUpdate) -> Device:
         device = await DeviceService.get(db, device_id)
-        for field, value in payload.model_dump(exclude_unset=True).items():
+        data = payload.model_dump(exclude_unset=True)
+        if "protocol" in data and data["protocol"] not in AdapterRegistry.names():
+            raise BizException(
+                code="PROTOCOL_NOT_REGISTERED",
+                message=f"未注册的协议: {data['protocol']}",
+                status_code=422,
+            )
+        for field, value in data.items():
             setattr(device, field, value)
         await db.flush()
         return device

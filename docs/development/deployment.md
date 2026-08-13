@@ -1,6 +1,6 @@
 # 部署
 
-> SHM 平台后端 v0.2.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.3.0 · 更新于 2026-08-13
 
 ## 1. 镜像构建
 
@@ -105,6 +105,30 @@ server {
         proxy_set_header Connection "upgrade";
     }
 }
+```
+
+## 6. 边缘网关接入
+
+架构说明书第 10.1 节定义边缘网关为独立 Docker / 工控机进程。`v0.3` 提供**参考实现** `scripts/run_edge_adapter.py`，演示完整调用模式：
+
+- 接收 `--device-code`、`--protocol`、`--host`、`--port` 参数
+- 从 `AdapterRegistry.get(protocol)` 实例化适配器
+- 循环 `connect → read_batch → POST /api/v1/data/ingest → sleep`
+- Ctrl+C 优雅关闭
+
+**生产部署时不应直接使用参考脚本**，应：
+1. 拆为独立服务（FastAPI 进程外 / 独立 Docker / 工控机部署）
+2. 实现断网本地缓存（SQLite/Redis）与恢复后补发
+3. 接入设备健康监控与配置热更新
+
+参考运行命令（配合 modbus_simulator 演示）：
+
+```bash
+.venv/bin/python -m scripts.modbus_simulator --port 5020 --rate-hz 2 &
+.venv/bin/python -m scripts.run_edge_adapter \
+    --device-code GW-MODBUS-DEMO \
+    --protocol modbus_tcp \
+    --host 127.0.0.1 --port 5020
 ```
 
 ## 7. 安全清单

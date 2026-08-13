@@ -1,7 +1,7 @@
 # SHM 平台后端
 
 > 结构健康监测（Structural Health Monitoring）平台后端服务
-> 版本：**0.2.0** · 文档同步于 2026-08-13
+> 版本：**0.3.0** · 文档同步于 2026-08-13
 
 面向建筑结构监测场景，提供三维数字孪生所需的实时数据底座、多协议设备接入、高频时序数据治理与可扩展的分析引擎。全异步架构，基于 FastAPI + TimescaleDB + Redis。
 
@@ -63,6 +63,7 @@ cp .env.example .env
   - [模块技术说明](docs/development/modules.md)
   - [代码规范](docs/development/coding-standards.md)
   - [测试](docs/development/testing.md)
+  - [模拟与冒烟（无硬件）](docs/development/simulation.md)
   - [部署](docs/development/deployment.md)
 - **使用者**
   - [API 概览与鉴权](docs/api/overview.md)
@@ -70,19 +71,22 @@ cp .env.example .env
   - [项目](docs/api/projects.md)
   - [设备](docs/api/devices.md)
   - [测点](docs/api/points.md)
+  - [协议](docs/api/protocols.md)
   - [时序数据](docs/api/data.md)
   - [告警](docs/api/alerts.md)
   - [大屏](docs/api/dashboard.md)
 
 ## 项目状态
 
-`v0.2.0` — 在 `v0.2.0` 基础上补齐**采集→告警→推送**闭环：
+`v0.3.0` — 在 `v0.2.0` 基础上扩展**协议适配器**与**无硬件演示能力**：
 
-- 设备 / 测点完整 CRUD（含 `alert_rules` 配置）
-- 阈值评估（`alert_service.evaluate_thresholds`）+ 告警生命周期（`upsert_alert` / `close_open_alerts`）
-- Celery `alerts` 队列异步评估（`app/tasks/alert_tasks.py`）
-- WebSocket `data:alert` 实时推送
-- 告警列表 / 详情 / 确认（`/api/v1/alerts`）
-- 大屏聚合（`/api/v1/dashboard/stats`、`/recent-alerts`）
+- `modbus_tcp` 适配器（pymodbus）：6 种 data_type 解码，单点错误隔离
+- `mqtt` 适配器（aiomqtt）：后台订阅协程 + 队列 + JSON payload 容错
+- 服务器端 `GET /api/v1/protocols` 元数据接口
+- `POST /api/v1/devices` 校验 `protocol` 必须是已注册名
+- 三套模拟器脚本：`modbus_simulator.py` / `mqtt_injector.py` / `simulate_data.py`
+- 边缘网关参考脚本 `scripts/run_edge_adapter.py`
 
-尚未实现：协议适配器扩展（modbus/mqtt/opcua）、3D 模型上传与分析插件（FFT/趋势预测）、多渠道通知（邮件/钉钉）。这些模块在后续迭代按 AGENTS.md 规划补全。
+`v0.2.0` 之前的累计能力：JWT 认证、项目/设备/测点/告警/大屏 CRUD、阈值评估 + Celery `alerts` 队列 + WS 实时推送、TimescaleDB hypertable + 连续聚合。
+
+尚未实现：modbus_rtu（串口）、opcua、3D 模型上传、FFT/趋势预测分析插件、多渠道通知（邮件/钉钉/企微）。这些模块在后续迭代按 AGENTS.md 规划补全。

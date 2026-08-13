@@ -1,6 +1,6 @@
 # 模块技术说明
 
-> SHM 平台后端 v0.2.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.3.0 · 更新于 2026-08-13
 >
 > 逐模块说明 `app/` 下各子包的关键类、职责与调用关系。
 
@@ -221,6 +221,12 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 - `base.py` — `ProtocolAdapter` 抽象基类（**接口契约，禁止修改**）+ `RawReading` / `ProtocolConfig` dataclass
 - `registry.py` — `AdapterRegistry.discover()` 扫描包目录，注册所有 `ProtocolAdapter` 子类
 - `http_json_adapter.py` — 示例适配器：HTTP GET 返回 JSON 数组，httpx 实现
+- `modbus_tcp_adapter.py`（v0.3 新增）— `ModbusTcpAdapter`（pymodbus）
+  - 支持 `uint16` / `int16` / `uint32` / `int32` / `float32` / `float64` 字节序解码
+  - 单点错误隔离（quality="bad"）
+- `mqtt_adapter.py`（v0.3 新增）— `MqttAdapter`（aiomqtt）
+  - 后台订阅协程 + 内部 `asyncio.Queue` 缓冲
+  - JSON payload 容错（字段缺失 / 格式错误丢弃）
 
 新增协议步骤（AGENTS.md 第 4.2 节）：
 1. 在 `app/plugins/protocols/` 下新建 `<protocol>_adapter.py`
@@ -233,7 +239,7 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 - `base.py` — `AnalysisPlugin` 抽象基类（接口契约）
 - `registry.py` — `AnalyzerRegistry.discover()` 同上
 
-具体插件（FFT / threshold_alert / trend_predict）在 v0.2+ 补。
+具体插件（FFT / threshold_alert / trend_predict）在 v0.3+ 补。
 
 ## 异步任务
 
