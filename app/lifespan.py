@@ -11,6 +11,7 @@ from app.database import engine
 from app.plugins.analyzers.registry import AnalyzerRegistry
 from app.plugins.protocols.registry import AdapterRegistry
 from app.services import data_service
+from app.utils import minio_client
 from app.ws.manager import manager
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     AdapterRegistry.discover()
     AnalyzerRegistry.discover()
     logger.info("协议适配器: %s", AdapterRegistry.names())
+    logger.info("分析插件: %s", AnalyzerRegistry.names())
 
     # WebSocket Redis 广播（失败不阻塞启动，实时推送降级为不可用）
     try:
@@ -29,8 +31,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.exception("WebSocket Redis 初始化失败")
 
+    # MinIO 客户端初始化（bucket 不存在自动创建；失败仅记日志）
+    try:
+        await minio_client.init()
+    except Exception:
+        logger.exception("MinIO 初始化失败")
+
     yield
 
     await manager.close()
+    await minio_client.close()
     await data_service.close()
     await engine.dispose()

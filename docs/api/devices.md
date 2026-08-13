@@ -1,6 +1,6 @@
 # 设备
 
-> v0.3.0 · 更新于 2026-08-13
+> v0.4.0 · 更新于 2026-08-13
 
 管理项目内的硬件网关 / 采集设备。每个设备绑定一种协议，通过 `devices.protocol` 字段匹配 `app/plugins/protocols/` 中注册的 `ProtocolAdapter`。
 

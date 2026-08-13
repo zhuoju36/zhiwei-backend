@@ -1,6 +1,6 @@
 # 模块技术说明
 
-> SHM 平台后端 v0.3.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.4.0 · 更新于 2026-08-13
 >
 > 逐模块说明 `app/` 下各子包的关键类、职责与调用关系。
 
@@ -238,8 +238,11 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 
 - `base.py` — `AnalysisPlugin` 抽象基类（接口契约）
 - `registry.py` — `AnalyzerRegistry.discover()` 同上
+- `fft_analysis.py`（v0.4 新增）— `FftAnalysis`
+  - 输入：numpy ndarray + `sampling_rate`
+  - 输出：JSON 摘要（dominant_freq / dominant_magnitude / top_peaks / 警告）+ 完整 NPZ（频率 + 幅值）存 MinIO
 
-具体插件（FFT / threshold_alert / trend_predict）在 v0.3+ 补。
+具体插件（trend_predict / modal_analysis）在 v0.5+ 补。
 
 ## 异步任务
 

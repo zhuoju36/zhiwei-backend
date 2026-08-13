@@ -1,7 +1,7 @@
 # SHM 平台后端
 
 > 结构健康监测（Structural Health Monitoring）平台后端服务
-> 版本：**0.3.0** · 文档同步于 2026-08-13
+> 版本：**0.4.0** · 文档同步于 2026-08-13
 
 面向建筑结构监测场景，提供三维数字孪生所需的实时数据底座、多协议设备接入、高频时序数据治理与可扩展的分析引擎。全异步架构，基于 FastAPI + TimescaleDB + Redis。
 
@@ -75,10 +75,11 @@ cp .env.example .env
   - [时序数据](docs/api/data.md)
   - [告警](docs/api/alerts.md)
   - [大屏](docs/api/dashboard.md)
+  - [分析](docs/api/analysis.md)
 
 ## 项目状态
 
-`v0.3.0` — 在 `v0.2.0` 基础上扩展**协议适配器**与**无硬件演示能力**：
+`v0.4.0` — 在 `v0.2.0` 基础上扩展**协议适配器**与**无硬件演示能力**：
 
 - `modbus_tcp` 适配器（pymodbus）：6 种 data_type 解码，单点错误隔离
 - `mqtt` 适配器（aiomqtt）：后台订阅协程 + 队列 + JSON payload 容错
