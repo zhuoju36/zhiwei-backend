@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -24,6 +24,7 @@ class TriggerEvent:
     operator: str
     value: float
     message: str | None = None
+    suppress_seconds: int = 60
 
 
 _OPS = {
@@ -55,20 +56,28 @@ def evaluate_thresholds(value: float, rules: list[dict[str, Any]] | None) -> lis
                     operator=op,
                     value=value,
                     message=rule.get("message"),
+                    suppress_seconds=int(rule.get("suppress_seconds", 60)),
                 )
             )
     return events
 
 
-async def upsert_alert(
+async def trigger_alert(
     db: AsyncSession,
     point_id: int,
     event: TriggerEvent,
     timestamp: datetime,
 ) -> tuple[Alert, bool]:
-    """维护按 (point_id, level) 唯一未恢复告警。
+    """维护按 (point_id, level) 唯一活跃告警，含抑制窗口。
 
-    返回 (alert, created)。created=True 表示新插入，False 表示命中已存在或关闭。
+    流程：
+    1. 命中未恢复告警 → 更新 value/threshold，返回 (alert, created=False)
+    2. 否则查找抑制窗口（suppress_seconds）内最近一条已恢复告警 →
+       重开（is_resolved=false, ended_at=null, started_at=timestamp），返回 (alert, created=True)
+    3. 否则插入新告警，返回 (alert, created=True)
+
+    返回 (alert, created)。created=True 表示"业务上是一次新告警事件"
+    （新建或重开），调用方应触发通知 / WS 推送。
     """
     open_alert = (
         await db.execute(
@@ -80,26 +89,72 @@ async def upsert_alert(
         )
     ).scalar_one_or_none()
 
-    if open_alert is None:
-        msg = event.message or f"{event.operator} {event.threshold} 触发"
-        alert = Alert(
-            point_id=point_id,
-            alert_type="threshold",
-            level=event.level,
-            message=msg,
-            value=event.value,
-            threshold=event.threshold,
-            started_at=timestamp,
-        )
-        db.add(alert)
+    if open_alert is not None:
+        open_alert.value = event.value
+        open_alert.threshold = event.threshold
         await db.flush()
-        return alert, True
+        return open_alert, False
 
-    # 已存在未恢复告警：更新最新值/阈值（覆盖语义），不重置 started_at
-    open_alert.value = event.value
-    open_alert.threshold = event.threshold
+    # 抑制窗口：在最近 suppress_seconds 秒内关闭的告警，复用并重开
+    if event.suppress_seconds > 0:
+        threshold_ts = timestamp - timedelta(seconds=event.suppress_seconds)
+        recent = (
+            await db.execute(
+                select(Alert)
+                .where(
+                    Alert.point_id == point_id,
+                    Alert.level == event.level,
+                    Alert.is_resolved.is_(True),
+                    Alert.ended_at.is_not(None),
+                    Alert.ended_at >= threshold_ts,
+                )
+                .order_by(Alert.ended_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if recent is not None:
+            recent.is_resolved = False
+            recent.ended_at = None
+            recent.started_at = timestamp
+            recent.value = event.value
+            recent.threshold = event.threshold
+            if event.message is not None:
+                recent.message = event.message
+            await db.flush()
+            return recent, True
+
+    msg = event.message or f"{event.operator} {event.threshold} 触发"
+    alert = Alert(
+        point_id=point_id,
+        alert_type="threshold",
+        level=event.level,
+        message=msg,
+        value=event.value,
+        threshold=event.threshold,
+        started_at=timestamp,
+    )
+    db.add(alert)
     await db.flush()
-    return open_alert, False
+    return alert, True
+
+
+# v0.2 别名：保留以便旧测试/调用点兼容；内部直接走 trigger_alert（无抑制）。
+async def upsert_alert(
+    db: AsyncSession,
+    point_id: int,
+    event: TriggerEvent,
+    timestamp: datetime,
+) -> tuple[Alert, bool]:
+    """v0.2 接口：抑制窗口为 0 时的简化版本。"""
+    no_suppress = TriggerEvent(
+        level=event.level,
+        threshold=event.threshold,
+        operator=event.operator,
+        value=event.value,
+        message=event.message,
+        suppress_seconds=0,
+    )
+    return await trigger_alert(db, point_id, no_suppress, timestamp)
 
 
 async def close_open_alerts(

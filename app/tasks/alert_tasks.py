@@ -111,9 +111,9 @@ async def _process_readings(readings: list[dict[str, Any]]) -> None:
                         },
                     )
 
-            # 对触发的 level upsert
+            # 对触发的 level trigger（含抑制窗口重开语义）
             for event in events:
-                alert, created = await alert_service.upsert_alert(db, pid, event, ts)
+                alert, created = await alert_service.trigger_alert(db, pid, event, ts)
                 await db.commit()
                 await _publish_alert(
                     project_id,
@@ -128,6 +128,29 @@ async def _process_readings(readings: list[dict[str, Any]]) -> None:
                         "started_at": alert.started_at.isoformat(),
                     },
                 )
+                # 新建/重开时多渠道通知
+                if created:
+                    try:
+                        from app.notifications.base import AlertPayload
+                        from app.services.notification_service import dispatch_alert
+
+                        device_code = reading.get("device_code", "")
+                        point_code = reading.get("point_code", "")
+                        payload: AlertPayload = {
+                            "alert_id": alert.id,
+                            "point_id": pid,
+                            "project_id": project_id,
+                            "level": event.level,
+                            "value": event.value,
+                            "threshold": event.threshold,
+                            "message": alert.message,
+                            "started_at": alert.started_at.isoformat(),
+                            "device_code": device_code,
+                            "point_code": point_code,
+                        }
+                        await dispatch_alert(payload)
+                    except Exception:
+                        logger.exception("告警通知分发失败")
 
 
 def _parse_ts(ts_raw: Any) -> datetime:

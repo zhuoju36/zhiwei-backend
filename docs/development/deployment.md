@@ -1,6 +1,6 @@
 # 部署
 
-> SHM 平台后端 v0.4.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.5.0 · 更新于 2026-08-13
 
 ## 1. 镜像构建
 
@@ -130,6 +130,26 @@ server {
     --protocol modbus_tcp \
     --host 127.0.0.1 --port 5020
 ```
+
+## 告警配置（.env，v0.5+）
+
+```bash
+# Webhook 通道
+WEBHOOK_URL=                     # 例: https://oapi.dingtalk.com/robot/send?access_token=...
+WEBHOOK_HEADERS=                 # JSON 字符串，如 '{"X-Custom":"v1"}'
+WEBHOOK_TIMEOUT_SECONDS=10
+
+# Email 通道
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_USE_TLS=true
+SMTP_FROM=                        # 默认等于 SMTP_USER
+ALERT_EMAIL_TO=                  # 逗号分隔
+```
+
+任一通道未配置则跳过；告警新建 / 重开时多通道并发派发，失败隔离。详见 [notifications.md](../../api/notifications.md)。
 
 ## 7. 安全清单
 

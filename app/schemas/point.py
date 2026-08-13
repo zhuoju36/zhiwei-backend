@@ -13,6 +13,9 @@ class AlertRule(BaseModel):
     threshold: float
     level: str = Field(pattern=r"^(info|warning|danger)$", description="告警级别")
     message: str | None = None
+    # 抑制窗口（秒）：告警关闭后此时间内再次触发会复用最近一条已关闭告警（重开），
+    # 而非新建，避免告警表 chattering。0 表示不抑制。
+    suppress_seconds: int = Field(default=60, ge=0)
 
 
 class PointCreate(BaseModel):

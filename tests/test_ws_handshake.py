@@ -7,8 +7,6 @@
 造成跨事件循环问题。
 """
 
-import json
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -31,17 +29,64 @@ def _get_token(client: TestClient) -> str:
 
 
 def test_ws_handshake_then_subscribe() -> None:
-    """验证修复后的完整握手：accept → send subscribe → 收到 cmd:subscribed。"""
-    with TestClient(app) as client:
-        # 直接构造一个有效 JWT（避免依赖完整应用）
-        from app.core.security import create_access_token
+    """验证修复后的完整握手：accept → send subscribe → 收到 cmd:subscribed。
 
-        token = create_access_token(user_id=1, role="admin")
-        with client.websocket_connect(f"/ws/data?token={token}") as ws:
-            ws.send_text(json.dumps({"type": "cmd:subscribe", "project_id": 1}))
-            ack = json.loads(ws.receive_text())
-            assert ack["type"] == "cmd:subscribed"
-            assert ack["project_id"] == 1
+    直接调用 ws_data handler 避免 TestClient 跨事件循环池污染。
+    """
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from app.core.security import create_access_token
+    from app.ws.endpoints import ws_data
+
+    token = create_access_token(user_id=1, role="admin")
+
+    class FakeWS:
+        def __init__(self):
+            self.accepted = False
+            self.sent: list[str] = []
+            self._recv_queue: list[bytes] = [b'{"type":"cmd:subscribe","project_id":1}']
+
+        async def accept(self):
+            self.accepted = True
+
+        async def close(self, code: int = 1000, reason: str = ""):
+            pass
+
+        async def send_text(self, text: str):
+            self.sent.append(text)
+
+        async def receive_text(self):
+            if self._recv_queue:
+                return self._recv_queue.pop(0).decode()
+            from starlette.websockets import WebSocketDisconnect
+
+            raise WebSocketDisconnect()
+
+    class _SessionAdmin:
+        async def get(self, _model, _id):
+            class _U:
+                id = 1
+                username = "x"
+                role = "admin"
+                is_active = True
+
+            return _U()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+    fake = FakeWS()
+    with patch("app.ws.endpoints.AsyncSessionLocal") as mock_session:
+        mock_session.return_value.__aenter__ = AsyncMock(return_value=_SessionAdmin())
+        mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
+        asyncio.run(ws_data(fake, token=token))
+
+    assert fake.accepted is True
+    assert any('"cmd:subscribed"' in t and '"project_id": 1' in t for t in fake.sent)
 
 
 def test_ws_invalid_token_rejected() -> None:

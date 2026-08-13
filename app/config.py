@@ -31,6 +31,20 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
+    # 告警通知（v0.5）：全部可选；配置则启用对应通道
+    # Webhook 通道
+    webhook_url: str = ""  # 例如 https://oapi.dingtalk.com/robot/send?access_token=...
+    webhook_headers: str = ""  # JSON 字符串，如 '{"X-Custom":"v"}'
+    webhook_timeout_seconds: float = 10.0
+    # Email 通道（SMTP）
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True
+    smtp_from: str = ""
+    alert_email_to: str = ""  # 逗号分隔
+
     # CORS（生产环境禁止使用 "*"）
     cors_origins: list[str] = ["http://localhost:5173"]
 

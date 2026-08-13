@@ -1,6 +1,6 @@
 # 模块技术说明
 
-> SHM 平台后端 v0.4.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.5.0 · 更新于 2026-08-13
 >
 > 逐模块说明 `app/` 下各子包的关键类、职责与调用关系。
 
@@ -215,6 +215,13 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 `users.py / devices.py / points.py / alerts.py / analysis.py / dashboard.py / models.py` —— 已创建 router 与 prefix，等 v0.2+ 补业务。
 
 ## 插件体系
+
+### `app/notifications/`（v0.5）
+
+- `base.py` — `AlertPayload` TypedDict + `NotificationChannel` Protocol
+- `webhook.py` — `WebhookChannel`（httpx 异步 POST，10s 超时，失败仅记日志）
+- `email.py` — `EmailChannel`（smtplib in executor，HTML 模板，按 level 着色）
+- `app/services/notification_service.py` — `dispatch_alert` 并发派发，通道故障隔离
 
 ### `app/plugins/protocols/`
 

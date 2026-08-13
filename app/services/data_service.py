@@ -23,7 +23,9 @@ _lock = asyncio.Lock()
 
 
 async def get_pool() -> asyncpg.Pool:
-    global _pool
+    global _pool, _lock
+    if _lock is None:
+        _lock = asyncio.Lock()
     if _pool is None:
         async with _lock:
             if _pool is None:

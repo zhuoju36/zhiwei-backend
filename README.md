@@ -76,10 +76,17 @@ cp .env.example .env
   - [告警](docs/api/alerts.md)
   - [大屏](docs/api/dashboard.md)
   - [分析](docs/api/analysis.md)
+  - [通知](docs/api/notifications.md)
 
 ## 项目状态
 
-`v0.4.0` — 在 `v0.2.0` 基础上扩展**协议适配器**与**无硬件演示能力**：
+`v0.5.0` — 在 `v0.4.0` 基础上补齐 WS 安全 + 告警抑制 + 多渠道通知：
+
+- **WS 项目权限校验**：v0.1 遗留的 TODO 修复（`/ws/data` 在 `cmd:subscribe` 时强制 `check_project_access`，失败发送 `cmd:error` 4003 而非直接 4401）
+- **告警抑制**：`AlertRule.suppress_seconds`（默认 60）控制窗口；窗口内再次触发复用最近一条已关闭告警（重开），避免 chattering
+- **多渠道通知**：Webhook + Email 两个全局通道（env 配置），告警新建/重开时并发派发，失败隔离
+- 新增 `app/notifications/` 子系统（base + webhook + email + dispatch）
+- `trigger_alert` 替代 v0.2 `upsert_alert`（向后兼容 `upsert_alert` 别名）
 
 - `modbus_tcp` 适配器（pymodbus）：6 种 data_type 解码，单点错误隔离
 - `mqtt` 适配器（aiomqtt）：后台订阅协程 + 队列 + JSON payload 容错

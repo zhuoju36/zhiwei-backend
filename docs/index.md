@@ -1,6 +1,6 @@
 # 文档目录
 
-> SHM 平台后端 v0.4.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.5.0 · 更新于 2026-08-13
 
 ## 开发者文档
 
@@ -26,9 +26,10 @@
 | [api/points.md](api/points.md) | 测点 CRUD、alert_rules 字段语义 |
 | [api/protocols.md](api/protocols.md) | 协议元数据 + 各协议 config schema |
 | [api/data.md](api/data.md) | 时序数据批量接入、查询、最新值、WebSocket 订阅、告警事件 |
-| [api/alerts.md](api/alerts.md) | 告警列表 / 详情 / 确认 |
+| [api/alerts.md](api/alerts.md) | 告警列表 / 详情 / 确认 / 抑制窗口 |
 | [api/dashboard.md](api/dashboard.md) | 大屏聚合统计与最近告警 |
 | [api/analysis.md](api/analysis.md) | 分析任务提交、查询、NPZ 结果下载 |
+| [api/notifications.md](api/notifications.md) | 告警通知通道（Webhook / Email） |
 
 ## 其他参考
 
