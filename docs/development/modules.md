@@ -1,6 +1,6 @@
 # 模块技术说明
 
-> SHM 平台后端 v0.1.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.2.0 · 更新于 2026-08-13
 >
 > 逐模块说明 `app/` 下各子包的关键类、职责与调用关系。
 
@@ -122,6 +122,31 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 - `authenticate(db, username, password)` — `verify_password` + 活跃校验
 - `create_user(db, payload)` — 哈希 + 唯一性校验
 
+### `app/services/device_service.py:DeviceService`
+
+- `get(db, id)` / `list_by_project(db, project_id, page, size)` / `create / update / delete`
+- 创建时校验项目存在 + `device_code` 全局唯一（409 `DEVICE_CODE_EXISTS`）
+
+### `app/services/point_service.py:PointService`
+
+- `get / list_by_device / list_by_project / create / update / delete`
+- `list_alert_rules_batch(db, point_ids)` — 批量取测点的 `alert_rules`，供告警任务使用，避免 N+1
+- 创建时校验 `point_code` 在同 `device_id` 下唯一（409 `POINT_CODE_EXISTS`）
+- `alert_rules` 字段由前端传入 `list[AlertRule]`，存储为 JSONB
+
+### `app/services/alert_service.py`
+
+- `TriggerEvent` dataclass：`{level, threshold, operator, value, message}`
+- `evaluate_thresholds(value, rules) -> list[TriggerEvent]` — 单条读数 vs 多个规则
+  - 运算符：`gt / lt / ge / le / eq / ne`
+  - 规则字段缺失或 operator 非法 → 跳过该规则（不抛错）
+- `upsert_alert(db, point_id, event, ts) -> (Alert, created)` —— 触发/更新 upsert 逻辑：
+  - 已存在未恢复告警 → 更新 `value/threshold`，不重置 `started_at`
+  - 无 → 创建新告警
+- `close_open_alerts(db, point_id, level, ts)` — 关闭一条未恢复告警（值回到正常），幂等
+- `list_alerts(db, query)` / `get_alert` / `acknowledge_alert` — 列表（支持 project/point/level/resolved/时间窗）、详情、确认（设置 `ended_at/resolved_by/is_resolved`，并发二次确认返回 `409 ALERT_ALREADY_RESOLVED`）
+- `to_out_dict(alert)` — 模型 → JSON 安全的 dict
+
 ### `app/services/project_service.py:ProjectService`
 
 - `list_projects(db, user, page, size)` — admin 看全量，普通用户 join `user_projects` 过滤
@@ -155,6 +180,29 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 - `PUT /projects/{id}` — admin 更新
 - `DELETE /projects/{id}` — admin 删除（204）
 - `POST /projects/{id}/users` — admin 授权（204）
+
+### `app/routers/devices.py`
+
+- `GET /devices?project_id=...` — 按项目分页列表（项目成员可见）
+- `POST /devices` — 创建（项目写权限）
+- `GET /devices/{id}` / `PUT /devices/{id}` / `DELETE /devices/{id}`（删除需 admin）
+
+### `app/routers/points.py`
+
+- `GET /points?project_id=...` 或 `?device_id=...`（二选一）
+- `POST /points` / `GET /points/{id}` / `PUT /points/{id}` / `DELETE /points/{id}`
+- `PUT` 支持更新 `alert_rules`（`list[AlertRule]` 经 Pydantic 子模型校验 operator/level）
+
+### `app/routers/alerts.py`
+
+- `GET /alerts` — 列表（分页 + `project_id/point_id/level/is_resolved/start/end` 过滤）
+- `GET /alerts/{id}` — 详情
+- `POST /alerts/{id}/acknowledge` — 确认（项目 admin 权限）
+
+### `app/routers/dashboard.py`
+
+- `GET /dashboard/stats?project_id=...` — `{active_alerts, alerts_24h, by_level, project_id}`
+- `GET /dashboard/recent-alerts?project_id=...&limit=10`
 
 ### `app/routers/data.py`
 
@@ -200,7 +248,19 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 | `reports` | `report_tasks` | PDF / Excel 报表 |
 | `maintenance` | `maintenance_tasks` | 连续聚合刷新、数据归档 |
 
-模块当前为占位，按需在对应文件加 `@shared_task(queue="...")` 函数。
+### `app/tasks/alert_tasks.py`
+
+- `@shared_task(queue="alerts", max_retries=3) def check_threshold_batch(readings)`
+- 由 `data_service.batch_ingest` 在写入完成后调用（`.delay()`）
+- 处理流程：
+  1. 收集所有涉及的 `point_id`，一次性 JOIN 取出 `alert_rules` 和 `device.project_id`
+  2. 逐条评估 `evaluate_thresholds`
+  3. 触发 upsert / 关闭已存在的 open alert
+  4. 通过 Redis Pub/Sub 向 `project:{id}` 频道推送 `{"type": "data:alert", "payload": {...}}`
+- 测试用 `task_always_eager=True`（`tests/conftest.py` autouse fixture 开启）
+- 文件顶部 `nest_asyncio.apply()` 允许在已有事件循环中运行 `asyncio.run()`（兼容测试异步上下文）
+
+其他任务模块当前为占位，按需在对应文件加 `@shared_task(queue="...")` 函数。
 
 ## WebSocket
 

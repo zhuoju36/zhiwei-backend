@@ -1,6 +1,6 @@
 # 架构设计
 
-> SHM 平台后端 v0.1.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.2.0 · 更新于 2026-08-13
 >
 > 本文聚焦后端实现架构。全局业务架构、容量规划、性能目标参见 `../架构说明书.md`。
 
@@ -103,8 +103,8 @@
 
 ## 5. 演进路径
 
-短期（v0.2）：补全 devices/points/alerts/analysis/dashboard/models 路由的具体业务；加入 modbus_tcp 示例适配器；阈值告警插件 + Celery 任务；3D 模型上传链路。
+短期（v0.2，**已交付**）：补全 devices/points/alerts/dashboard 路由；阈值告警评估 + Celery `alerts` 队列异步触发；WebSocket `data:alert` 实时推送；告警确认（`/alerts/{id}/acknowledge`）；大屏聚合统计。
 
-中期（v0.5）：多租户与 PostgreSQL RLS；连续聚合增加 1h/1d 级别；分析结果 MinIO 存储；审计日志。
+中期（v0.5）：modbus_tcp / mqtt / opcua 适配器；FFT / 趋势预测分析插件与 MinIO 存储；滑动窗口告警去重与告警抑制；多渠道通知（邮件 / 钉钉 / 企微）；审计日志。
 
-长期：K8s 化、HTTPS 终止、跨区域复制。
+长期（v1.0）：K8s 化、HTTPS 终止、跨区域复制。

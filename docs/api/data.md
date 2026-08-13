@@ -1,6 +1,6 @@
 # 时序数据
 
-> v0.1.0 · 更新于 2026-08-13
+> v0.2.0 · 更新于 2026-08-13
 
 边缘网关通过 `/data/ingest` 上报传感器读数，前端通过 `/data/timeseries`、`/data/latest`、`/ws/data` 消费数据。
 
@@ -257,7 +257,7 @@ ws://<host>/ws/data?token=<access_token>
 }
 ```
 
-告警事件（v0.2+ 提供，本版本未发出）：
+告警事件（由 Celery `alerts` 队列异步推送，前端在订阅项目频道后接收）：
 
 ```json
 {
@@ -266,12 +266,21 @@ ws://<host>/ws/data?token=<access_token>
     "alert_id": 456,
     "point_id": 1,
     "level": "warning",
-    "message": "加速度峰值超过阈值 0.5 m/s2",
     "value": 0.62,
-    "threshold": 0.5
+    "threshold": 0.5,
+    "message": "gt 0.5 触发",
+    "status": "triggered",
+    "started_at": "2026-08-13T12:00:00Z"
   }
 }
 ```
+
+`status` 取值：
+- `triggered`：新告警创建
+- `updated`：已有未恢复告警被新读数刷新（value/threshold 更新）
+- `resolved`：自动恢复或人工确认后关闭
+
+完整字段说明见 [alerts.md § WebSocket 实时事件](alerts.md#websocket-实时事件)。
 
 ### 错误
 
@@ -283,14 +292,14 @@ ws://<host>/ws/data?token=<access_token>
 ```python
 import asyncio, json, websockets
 
+
 async def main():
-    async with websockets.connect(
-        f"ws://localhost:8000/ws/data?token={TOKEN}"
-    ) as ws:
+    async with websockets.connect(f"ws://localhost:8000/ws/data?token={TOKEN}") as ws:
         await ws.send(json.dumps({"type": "cmd:subscribe", "project_id": 1}))
         async for msg in ws:
             data = json.loads(msg)
             print(data)
+
 
 asyncio.run(main())
 ```
@@ -300,3 +309,4 @@ asyncio.run(main())
 - 当前 WebSocket 端点**未做项目权限校验**（`endpoints.py` 注释标注 `TODO`）。生产前必须补充，否则持有 JWT 的用户可订阅任意项目
 - 多实例部署时实时推送通过 Redis Pub/Sub 跨实例广播（`app/ws/manager.py`），无需额外配置
 - 单测点推送频率受边缘网关采集频率影响；前端展示时建议按时间窗口合并渲染
+- 告警事件由 `app/tasks/alert_tasks.py` 在 `POST /data/ingest` 完成后异步推送，与实时数据共享同一 Redis 频道

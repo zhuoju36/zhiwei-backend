@@ -22,8 +22,8 @@ async def test_project_crud_flow(client: AsyncClient, admin_user: dict) -> None:
     project_id = project["id"]
     assert project["name"] == name
 
-    # 列表包含新项目
-    resp = await client.get("/api/v1/projects", headers=headers)
+    # 列表包含新项目（size 设大避免老测试残留挤压）
+    resp = await client.get("/api/v1/projects?size=200", headers=headers)
     assert resp.status_code == 200
     page = resp.json()["data"]
     assert page["total"] >= 1

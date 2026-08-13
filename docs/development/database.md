@@ -1,6 +1,6 @@
 # 数据库与迁移
 
-> SHM 平台后端 v0.1.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.2.0 · 更新于 2026-08-13
 >
 > 数据库架构定义在 `../架构说明书.md` 第 4 节；本文描述后端实现细节。
 
@@ -29,6 +29,28 @@ PostgreSQL 15 + TimescaleDB 2.x
 | `devices` | id | 设备；唯一索引 device_code；FK projects.id |
 | `points` | id | 测点；唯一 (device_id, point_code)；JSONB position / alert_rules |
 | `alerts` | id | 告警；FK points.id；level / is_resolved / 时间窗 |
+
+### 告警生命周期
+
+```
+每批 readings 触发 _dispatch_alert_check → Celery alerts 队列 → check_threshold_batch
+  │
+  ▼
+对每个 reading:
+  for rule in alert_rules:
+    if rule.matches(value):
+      → upsert_alert(point_id, level, value, ...)
+        · 无未恢复告警 → INSERT (started_at=reading.timestamp)
+        · 已存在 → UPDATE value/threshold（保留 started_at）
+    if open_but_not_triggered:
+      → close_open_alerts(point_id, level, reading.timestamp)
+        · UPDATE ended_at=ts, is_resolved=true
+  │
+  ▼
+新增/关闭的 alert → Redis Pub/Sub project:{id} → WebSocket data:alert
+```
+
+每条未恢复告警按 `(point_id, level)` 唯一。持续触发不重复创建；值回到正常范围自动关闭。v0.2 未做滑动窗口去重 / 告警抑制 / 升级。
 
 所有表 `created_at` 默认 `now()`，软删除字段未启用（开发早期阶段，AGENTS.md 0.1 节）。
 
@@ -116,12 +138,18 @@ WITH NO DATA;
 ```python
 async def batch_ingest(readings: list[ReadingIn]) -> int:
     async with pool.acquire() as conn:
-        code_map = await _resolve_code_map(conn, readings)   # 一次 SELECT
-        records = [(r.timestamp, did, pid, r.value, r.quality, json.dumps(r.extra))
-                   for r in readings if (r.device_code, r.point_code) in code_map]
-        await conn.copy_records_to_table("sensor_raw", records=records,
-            columns=["time", "device_id", "point_id", "value", "quality", "metadata"])
-    await _publish_realtime(readings, code_map)   # Redis SET + PUBLISH
+        code_map = await _resolve_code_map(conn, readings)  # 一次 SELECT
+        records = [
+            (r.timestamp, did, pid, r.value, r.quality, json.dumps(r.extra))
+            for r in readings
+            if (r.device_code, r.point_code) in code_map
+        ]
+        await conn.copy_records_to_table(
+            "sensor_raw",
+            records=records,
+            columns=["time", "device_id", "point_id", "value", "quality", "metadata"],
+        )
+    await _publish_realtime(readings, code_map)  # Redis SET + PUBLISH
 ```
 
 要点：

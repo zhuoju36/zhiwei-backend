@@ -143,6 +143,87 @@ async def test_ingest_skips_unknown_codes(client: AsyncClient, point_fixture: di
     assert resp.json()["data"]["written"] == 2
 
 
+async def test_ingest_triggers_alert(
+    client: AsyncClient, admin_user: dict, point_fixture: dict
+) -> None:
+    """数据接入触发阈值告警：写一条超阈值读数 → 检查 alerts 表出现一条。"""
+    from sqlalchemy import delete, update
+
+    from app.models.alert import Alert
+    from app.models.point import Point
+
+    # 给 point_fixture 设置 alert_rules（threshold=0.5 warning）
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            update(Point)
+            .where(Point.id == point_fixture["point_id"])
+            .values(alert_rules=[{"operator": "gt", "threshold": 0.5, "level": "warning"}])
+        )
+        await db.commit()
+
+    try:
+        # 上报一条超阈值读数
+        base_time = datetime.now(UTC) - timedelta(minutes=2)
+        readings = [
+            {
+                "device_code": point_fixture["device_code"],
+                "point_code": point_fixture["point_code"],
+                "timestamp": base_time.isoformat(),
+                "value": 0.99,  # 超过 0.5
+                "unit": "m/s2",
+            }
+        ]
+        resp = await client.post(
+            "/api/v1/data/ingest", json={"readings": readings}, headers=API_KEY_HEADERS
+        )
+        assert resp.status_code == 200, resp.text
+
+        # 由于 Celery 在 eager 模式下同步执行，告警应已写入
+        async with AsyncSessionLocal() as db:
+            alerts = (
+                (await db.execute(select(Alert).where(Alert.point_id == point_fixture["point_id"])))
+                .scalars()
+                .all()
+            )
+            assert len(alerts) == 1
+            assert alerts[0].level == "warning"
+            assert alerts[0].value == 0.99
+            assert alerts[0].is_resolved is False
+            assert alerts[0].alert_type == "threshold"
+
+        # 后续上报低值 → open 告警应自动关闭
+        readings2 = [
+            {
+                "device_code": point_fixture["device_code"],
+                "point_code": point_fixture["point_code"],
+                "timestamp": (base_time + timedelta(seconds=1)).isoformat(),
+                "value": 0.1,
+                "unit": "m/s2",
+            }
+        ]
+        resp = await client.post(
+            "/api/v1/data/ingest", json={"readings": readings2}, headers=API_KEY_HEADERS
+        )
+        assert resp.status_code == 200
+
+        async with AsyncSessionLocal() as db:
+            alerts = (
+                (await db.execute(select(Alert).where(Alert.point_id == point_fixture["point_id"])))
+                .scalars()
+                .all()
+            )
+            assert len(alerts) == 1
+            assert alerts[0].is_resolved is True
+            assert alerts[0].ended_at is not None
+    finally:
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(Alert).where(Alert.point_id == point_fixture["point_id"]))
+            await db.execute(
+                update(Point).where(Point.id == point_fixture["point_id"]).values(alert_rules=None)
+            )
+            await db.commit()
+
+
 async def test_batch_ingest_performance(
     client: AsyncClient, admin_user: dict, point_fixture: dict
 ) -> None:

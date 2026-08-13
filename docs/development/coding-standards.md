@@ -1,6 +1,6 @@
 # 代码规范
 
-> SHM 平台后端 v0.1.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.2.0 · 更新于 2026-08-13
 >
 > 本文补充 `../AGENTS.md` 中已给出的规则，给出更具体的实施细节与示例。AGENTS.md 是最高优先级；本文不与之冲突时可直接遵循。
 
@@ -41,6 +41,7 @@ class Device(Base):
 ```python
 from __future__ import annotations
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from app.models.device import Device
 ```
@@ -84,6 +85,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 ```python
 class BizException(Exception):
     def __init__(self, code: str, message: str, status_code: int = 400): ...
+
 
 class AuthException(BizException):
     def __init__(self, message: str = "未认证或凭证无效", status_code: int = 401):

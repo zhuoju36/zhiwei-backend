@@ -78,7 +78,12 @@ async def _resolve_code_map(
 
 
 async def batch_ingest(readings: list[ReadingIn]) -> int:
-    """批量写入 sensor_raw，返回实际写入条数。未知编码的读数被丢弃并记日志。"""
+    """批量写入 sensor_raw，返回实际写入条数。未知编码的读数被丢弃并记日志。
+
+    写完后：
+    1. Redis 最新值缓存与实时推送（_publish_realtime）
+    2. 投递到 Celery alerts 队列做阈值检查（_dispatch_alert_check）
+    """
     if not readings:
         return 0
 
@@ -87,16 +92,20 @@ async def batch_ingest(readings: list[ReadingIn]) -> int:
         code_map = await _resolve_code_map(conn, readings)
 
         records = []
+        accepted: list[
+            tuple[ReadingIn, int, int, int]
+        ] = []  # (reading, device_id, point_id, project_id)
         skipped = 0
         for r in readings:
             ids = code_map.get((r.device_code, r.point_code))
             if ids is None:
                 skipped += 1
                 continue
-            device_id, point_id, _ = ids
+            device_id, point_id, project_id = ids
             records.append(
                 (r.timestamp, device_id, point_id, r.value, r.quality.value, json.dumps(r.extra))
             )
+            accepted.append((r, device_id, point_id, project_id))
 
         if skipped:
             logger.warning("批量接入丢弃 %d 条未知编码读数", skipped)
@@ -110,7 +119,32 @@ async def batch_ingest(readings: list[ReadingIn]) -> int:
         )
 
     await _publish_realtime(readings, code_map)
+    await _dispatch_alert_check(accepted)
     return len(records)
+
+
+async def _dispatch_alert_check(accepted: list[tuple[ReadingIn, int, int, int]]) -> None:
+    """将已写入的读数投递到 Celery alerts 队列做阈值检查。"""
+    if not accepted:
+        return
+    payload = [
+        {
+            "device_id": device_id,
+            "point_id": point_id,
+            "project_id": project_id,
+            "value": r.value,
+            "timestamp": r.timestamp.isoformat(),
+            "quality": r.quality.value,
+        }
+        for r, device_id, point_id, project_id in accepted
+    ]
+    try:
+        # 延迟导入避免循环依赖（alert_tasks 间接依赖 data_service.get_redis）
+        from app.tasks.alert_tasks import check_threshold_batch
+
+        check_threshold_batch.delay(payload)
+    except Exception:
+        logger.exception("投递告警检查任务失败")
 
 
 async def _publish_realtime(

@@ -1,7 +1,7 @@
 # SHM 平台后端
 
 > 结构健康监测（Structural Health Monitoring）平台后端服务
-> 版本：**0.1.0** · 文档同步于 2026-08-13
+> 版本：**0.2.0** · 文档同步于 2026-08-13
 
 面向建筑结构监测场景，提供三维数字孪生所需的实时数据底座、多协议设备接入、高频时序数据治理与可扩展的分析引擎。全异步架构，基于 FastAPI + TimescaleDB + Redis。
 
@@ -68,10 +68,21 @@ cp .env.example .env
   - [API 概览与鉴权](docs/api/overview.md)
   - [认证](docs/api/auth.md)
   - [项目](docs/api/projects.md)
+  - [设备](docs/api/devices.md)
+  - [测点](docs/api/points.md)
   - [时序数据](docs/api/data.md)
+  - [告警](docs/api/alerts.md)
+  - [大屏](docs/api/dashboard.md)
 
 ## 项目状态
 
-`v0.1.0` — 骨架 + 最小端到端链路：用户认证、项目 CRUD、数据批量接入与查询。
+`v0.2.0` — 在 `v0.2.0` 基础上补齐**采集→告警→推送**闭环：
 
-尚未实现：设备 / 测点 / 告警 / 分析 / 大屏 / 模型 路由的具体业务（占位 router 已建），以及 modbus / mqtt / opcua 等具体协议适配器、FFT 等分析插件。这些模块在后续迭代按 AGENTS.md 规划补全。
+- 设备 / 测点完整 CRUD（含 `alert_rules` 配置）
+- 阈值评估（`alert_service.evaluate_thresholds`）+ 告警生命周期（`upsert_alert` / `close_open_alerts`）
+- Celery `alerts` 队列异步评估（`app/tasks/alert_tasks.py`）
+- WebSocket `data:alert` 实时推送
+- 告警列表 / 详情 / 确认（`/api/v1/alerts`）
+- 大屏聚合（`/api/v1/dashboard/stats`、`/recent-alerts`）
+
+尚未实现：协议适配器扩展（modbus/mqtt/opcua）、3D 模型上传与分析插件（FFT/趋势预测）、多渠道通知（邮件/钉钉）。这些模块在后续迭代按 AGENTS.md 规划补全。

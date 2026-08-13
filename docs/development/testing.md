@@ -1,6 +1,6 @@
 # 测试
 
-> SHM 平台后端 v0.1.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.2.0 · 更新于 2026-08-13
 
 ## 1. 测试金字塔
 
@@ -30,6 +30,8 @@ testpaths = ["tests"]
 ```
 
 **为什么用 session 级 event loop**：`app/services/data_service.py` 的全局 asyncpg/redis 连接池在首个测试里创建。若每个测试独立 loop，连接池会在第二个测试报 "attached to a different loop"。Session 级 loop 让连接池跨测试复用。
+
+**Celery eager 模式**：`tests/conftest.py` 的 autouse fixture 临时开启 `task_always_eager=True` 与 `task_eager_propagates=True`，让 `check_threshold_batch.delay()` 在调用现场同步执行，配合 `nest_asyncio.apply()` 在已有事件循环内复用同一 loop，连接池正常工作。
 
 ## 3. Fixture（`tests/conftest.py`）
 
