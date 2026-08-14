@@ -1,6 +1,6 @@
 # 告警
 
-> v0.6.0 · 更新于 2026-08-13
+> v0.7.0 · 更新于 2026-08-13
 
 阈值告警的生命周期由 [Celery `alerts` 队列](architecture.md) 异步驱动：每次 `POST /data/ingest` 完成后，对涉及的测点批量评估 `alert_rules`，触发或关闭 `(point_id, level)` 唯一未恢复告警。
 

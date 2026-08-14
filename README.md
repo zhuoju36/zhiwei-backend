@@ -81,10 +81,12 @@ Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME`
   - [分析](docs/api/analysis.md)
   - [通知](docs/api/notifications.md)
   - [首次部署引导（setup）](docs/api/setup.md)
+  - [平台元数据](docs/api/platform.md)
+  - [用户管理](docs/api/users.md)
 
 ## 项目状态
 
-`v0.6.0` — 在 `v0.5.0` 基础上补齐**首次部署引导**：
+`v0.7.0` — 在 `v0.5.0` 基础上补齐**首次部署引导**：
 
 - 后端 `GET/POST /api/v1/setup/*` 端点（无认证 + 严格 `users` 表空守卫）：前端 setup 页面或 CLI 创建首个 admin
 - 密码策略：≥8 字符 + 至少一个字母 + 一个数字（Pydantic schema + service 双重校验）

@@ -1,6 +1,6 @@
 # 文档目录
 
-> SHM 平台后端 v0.6.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.7.0 · 更新于 2026-08-13
 
 ## 开发者文档
 
@@ -31,6 +31,8 @@
 | [api/analysis.md](api/analysis.md) | 分析任务提交、查询、NPZ 结果下载 |
 | [api/notifications.md](api/notifications.md) | 告警通知通道（Webhook / Email） |
 | [api/setup.md](api/setup.md) | 首次部署引导：创建第一个 admin |
+| [api/platform.md](api/platform.md) | 平台元数据（名称 / Logo / 联系邮箱） |
+| [api/users.md](api/users.md) | 用户管理（admin CRUD + 自保护守卫） |
 
 ## 其他参考
 

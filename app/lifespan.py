@@ -37,6 +37,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.exception("MinIO 初始化失败")
 
+    # 平台元数据单行表初始化
+    try:
+        from app.database import AsyncSessionLocal
+        from app.services import platform_service
+
+        async with AsyncSessionLocal() as db:
+            await platform_service.ensure_singleton(db)
+    except Exception:
+        logger.exception("platform_settings 初始化失败")
+
     yield
 
     await manager.close()

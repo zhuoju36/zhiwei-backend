@@ -60,7 +60,7 @@ async def admin_user() -> AsyncGenerator[dict, None]:
     async with AsyncSessionLocal() as db:
         user = User(
             username=username,
-            email=f"{username}@test.local",
+            email=f"{username}@test.example.com",
             hashed_password=await hash_password(password),
             role="admin",
         )

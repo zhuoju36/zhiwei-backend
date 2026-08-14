@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.core.constants import Role
+from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, Role
 
 
 class UserCreate(BaseModel):
@@ -19,6 +19,26 @@ class UserUpdate(BaseModel):
     password: str | None = Field(default=None, min_length=8, max_length=128)
     role: Role | None = None
     is_active: bool | None = None
+
+
+class UserAdminUpdate(BaseModel):
+    """admin 更新普通用户 / 其他 admin（不含密码，密码走单独端点）。"""
+
+    email: EmailStr | None = None
+    role: Role | None = None
+    is_active: bool | None = None
+
+
+class UserPasswordReset(BaseModel):
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class UserListQuery(BaseModel):
+    username: str | None = Field(default=None, max_length=64, description="精确匹配")
+    role: Role | None = None
+    is_active: bool | None = None
+    page: int = Field(default=1, ge=1)
+    size: int = Field(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)
 
 
 class UserOut(BaseModel):
