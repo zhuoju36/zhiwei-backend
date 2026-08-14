@@ -55,6 +55,7 @@ class AnalysisPlugin(ABC):
     input_channels: int = 1  # 需要参与分析的通道数（1 或 N）
     min_samples: int = 2  # 每个通道最少样本数（框架前置校验）
     params_schema: dict[str, Any] = {}  # JSON Schema，前端表单
+    result_view: str = "generic"  # 前端结果展示视图：generic（通用摘要+附件下载）/ fft（频谱图）等
 
     @abstractmethod
     async def analyze(self, data: AnalysisInput, config: dict[str, Any]) -> AnalysisOutput:

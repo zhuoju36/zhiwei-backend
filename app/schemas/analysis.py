@@ -35,7 +35,7 @@ class AnalysisJobOut(BaseModel):
 
 
 class AnalysisPluginMeta(BaseModel):
-    """分析插件元信息（/analysis/plugins，前端渲染表单用）。"""
+    """分析插件元信息（/analysis/plugins，前端渲染表单与结果视图用）。"""
 
     name: str
     display_name: str
@@ -44,3 +44,4 @@ class AnalysisPluginMeta(BaseModel):
     input_channels: int
     min_samples: int
     params_schema: dict[str, Any]
+    result_view: str

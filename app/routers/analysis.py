@@ -1,5 +1,7 @@
 """分析路由：任务提交、查询、结果下载。"""
 
+import mimetypes
+
 from fastapi import Query
 from fastapi.responses import Response
 
@@ -46,6 +48,7 @@ async def list_plugins() -> list[AnalysisPluginMeta]:
                 input_channels=cls.input_channels,
                 min_samples=cls.min_samples,
                 params_schema=cls.params_schema,
+                result_view=cls.result_view,
             )
         )
     return result
@@ -124,8 +127,11 @@ async def get_job_result(job_id: int, db: DbSession, current_user: CurrentUser) 
             status_code=409,
         )
     data = await minio_client.get_bytes(job.result_key)
+    # 文件名取 MinIO key 末段（插件声明的 artifact_name，如 fft_1.npz）
+    filename = job.result_key.rsplit("/", 1)[-1]
+    media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     return Response(
         content=data,
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="job_{job_id}.npz"'},
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

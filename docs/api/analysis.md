@@ -58,10 +58,13 @@
     "version": "2.0.0",
     "input_channels": 1,
     "min_samples": 2,
-    "params_schema": { "type": "object", "properties": { "sampling_rate": { "type": "number" } } }
+    "params_schema": { "type": "object", "properties": { "sampling_rate": { "type": "number" } } },
+    "result_view": "fft"
   }
 ]
 ```
+
+`result_view` 指示前端结果展示方式：`generic`（通用摘要 + 附件下载）/ `fft`（频谱图）/ 未来注册的视图名。内置插件：`fft → fft`、`statistics → generic`。
 
 ---
 

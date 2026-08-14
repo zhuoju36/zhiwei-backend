@@ -34,6 +34,7 @@ class MyPlugin(AnalysisPlugin):
     version = "1.0.0"
     input_channels = 1  # 需要几个通道的数据（模态分析可设为 N）
     min_samples = 2  # 每个通道最少样本数（不足则任务失败）
+    result_view = "generic"  # 前端结果展示视图：generic（摘要+下载）/ fft（频谱图）
     params_schema = {  # JSON Schema：前端据此生成参数表单
         "type": "object",
         "properties": {

@@ -20,6 +20,7 @@ class FftAnalysis(AnalysisPlugin):
     version = "2.0.0"
     input_channels = 1
     min_samples = 2
+    result_view = "fft"  # 前端频谱图视图
     params_schema = {
         "type": "object",
         "properties": {

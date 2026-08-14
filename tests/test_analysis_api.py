@@ -124,6 +124,8 @@ async def test_submit_and_get_fft_job(client: AsyncClient, admin_user: dict) -> 
         resp = await client.get(f"/api/v1/analysis/jobs/{job_id}/result", headers=headers)
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/octet-stream"
+        # 下载文件名来自实际 artifact_name（v0.8d 起不再写死 job_{id}.npz）
+        assert 'filename="fft_' in resp.headers["content-disposition"]
         import io
 
         npz = np.load(io.BytesIO(resp.content))
@@ -180,7 +182,9 @@ async def test_list_plugins(client: AsyncClient, admin_user: dict) -> None:
     fft = plugins["fft"]
     assert fft["display_name"] == "FFT 频谱分析"
     assert fft["input_channels"] == 1
+    assert fft["result_view"] == "fft"
     assert "sampling_rate" in fft["params_schema"]["properties"]
+    assert plugins["statistics"]["result_view"] == "generic"
 
 
 async def test_submit_statistics_job(client: AsyncClient, admin_user: dict) -> None:

@@ -304,7 +304,7 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 ### `app/plugins/analyzers/`（v0.8d 接口 v2）
 
 - `base.py` — `AnalysisPlugin` 抽象基类（接口契约 v2）+ `AnalysisInput` / `AnalysisOutput` dataclass
-  - 自描述元信息：`name / display_name / description / version / plugin_api_version / input_channels / min_samples / params_schema`
+  - 自描述元信息：`name / display_name / description / version / plugin_api_version / input_channels / min_samples / params_schema / result_view`（前端据此渲染列表、参数表单与结果视图）
   - 插件 = 纯计算单元（输入数组 + 参数 → 摘要/附件），不接触数据库与实时流；面向社区开发者的指南见 [plugin-dev.md](plugin-dev.md)
 - `registry.py` — 双层发现：内置目录扫描 + Python entry_points（组 `shm_analyzers`，pip install 即接入）；版本守卫（`plugin_api_version` 不匹配拒绝加载）、同名保留先注册者
 - `fft_analysis.py` — `FftAnalysis`（v2 改造）：JSON 摘要 + NPZ 附件显式返回（`AnalysisOutput.artifact`）；`sampling_rate` 缺省取通道配置
