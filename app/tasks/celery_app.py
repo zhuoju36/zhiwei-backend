@@ -18,6 +18,7 @@ celery_app = Celery(
     include=[
         "app.tasks.alert_tasks",
         "app.tasks.analysis_tasks",
+        "app.tasks.model_tasks",
         "app.tasks.report_tasks",
         "app.tasks.maintenance_tasks",
     ],
@@ -28,6 +29,7 @@ celery_app.conf.update(
     task_routes={
         "app.tasks.alert_tasks.*": {"queue": "alerts"},
         "app.tasks.analysis_tasks.*": {"queue": "analysis"},
+        "app.tasks.model_tasks.*": {"queue": "reports"},
         "app.tasks.report_tasks.*": {"queue": "reports"},
         "app.tasks.maintenance_tasks.*": {"queue": "maintenance"},
     },

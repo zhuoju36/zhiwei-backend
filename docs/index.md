@@ -31,6 +31,7 @@
 | [api/alerts.md](api/alerts.md) | 告警列表 / 详情 / 确认 / 抑制窗口 |
 | [api/dashboard.md](api/dashboard.md) | 大屏聚合统计与最近告警 |
 | [api/analysis.md](api/analysis.md) | 分析任务提交、查询、NPZ 结果下载 |
+| [api/models.md](api/models.md) | 3D 模型上传、GLB 转换、下载、删除 |
 | [api/notifications.md](api/notifications.md) | 告警通知通道（Webhook / Email） |
 | [api/setup.md](api/setup.md) | 首次部署引导：创建第一个 admin |
 | [api/platform.md](api/platform.md) | 平台元数据（名称 / Logo / 联系邮箱） |

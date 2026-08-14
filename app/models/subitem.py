@@ -27,7 +27,6 @@ class Subitem(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     location: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # {lat, lng, address}
-    model_file_key: Mapped[str | None] = mapped_column(String(256))  # MinIO 中 GLB 文件路径
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

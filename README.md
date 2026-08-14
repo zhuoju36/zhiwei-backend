@@ -11,6 +11,7 @@
 - **高频时序数据**：1000+ 测点级规模，asyncpg COPY 批量写入，TimescaleDB hypertable + 7 天保留策略
 - **统一 RBAC**：管理员 / 普通用户两级，用户-子项授权控制数据访问范围
 - **实时推送**：Redis Pub/Sub → WebSocket 广播，前端按子项订阅
+- **3D 模型管理**：子项多模型上传（OBJ/STL/PLY/glTF/GLB），后台自动转 GLB 供数字孪生加载
 - **模块化分析引擎**：FFT / 阈值告警 / 趋势预测等算法以插件形式注册
 
 ## 技术栈
@@ -81,6 +82,7 @@ Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME`
   - [告警](docs/api/alerts.md)
   - [大屏](docs/api/dashboard.md)
   - [分析](docs/api/analysis.md)
+  - [3D 模型](docs/api/models.md)
   - [通知](docs/api/notifications.md)
   - [首次部署引导（setup）](docs/api/setup.md)
   - [平台元数据](docs/api/platform.md)
@@ -104,6 +106,13 @@ Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME`
 - `readings`（替代原 `sensor_raw`/`sensor_feature`）按 channel 存储，ingest 改用 `channel_code` 寻址
 - 新增 `/sensors`、`/channels` 路由与 service；告警、分析、实时推送全部下沉到 channel 粒度
 
+`v0.8c` — **3D 模型上传与转换**：一个子项可上传多个模型（OBJ/STL/PLY/glTF/GLB → GLB）：
+
+- 新增 `3d_models` 表 + `/api/v1/models/*` 路由（上传 / 列表 / 详情 / GLB 下载 / 删除）
+- Celery `reports` 队列后台转换（trimesh），`scripts/model_convert.py` 可独立 CLI 转换
+- IFC（BIM 格式）暂不支持，需 v0.9+ Blender/IfcOpenShell 转换器
+- 移除 `subitems.model_file_key` 冗余列，模型统一走 `3d_models` 表
+
 `v0.5.0` 之前的累计能力：WS 子项权限校验、告警抑制（per-rule suppress_seconds）、多渠道通知（Webhook + Email）、modbus_tcp/mqtt 协议适配器、FFT 分析 + Celery `analysis` + MinIO、JWT 认证、阈值告警 + WebSocket 推送、TimescaleDB hypertable。
 
-尚未实现：每子项通知通道配置（v0.7+）、钉钉/企微/Slack 专属 payload、modbus_rtu/opcua 适配器、3D 模型上传、模态/趋势预测分析插件、首次登录强制改密码、zxcvbn 密码强度评分、完整边缘网关进程、审计日志。
+尚未实现：每子项通知通道配置（v0.7+）、钉钉/企微/Slack 专属 payload、modbus_rtu/opcua 适配器、IFC→GLB 转换（Blender/IfcOpenShell）、模态/趋势预测分析插件、首次登录强制改密码、zxcvbn 密码强度评分、完整边缘网关进程、审计日志。

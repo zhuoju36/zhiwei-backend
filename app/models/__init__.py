@@ -5,6 +5,7 @@ from app.models.analysis import AnalysisJob
 from app.models.base import Base
 from app.models.channel import Channel
 from app.models.device import Device
+from app.models.model import Model
 from app.models.platform import PlatformSettings
 from app.models.point import Point
 from app.models.reading import Reading
@@ -18,6 +19,7 @@ __all__ = [
     "Base",
     "Channel",
     "Device",
+    "Model",
     "PlatformSettings",
     "Point",
     "Reading",

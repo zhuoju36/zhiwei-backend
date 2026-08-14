@@ -11,7 +11,7 @@ PostgreSQL 15 + TimescaleDB 2.x
   │
   ├─ 关系表（标准 PG 表，业务元数据）
   │    users / subitems / user_subitems / devices / points / sensors / channels /
-  │    alerts / analysis_jobs / platform_settings
+  │    alerts / analysis_jobs / 3d_models / platform_settings
   │
   └─ 时序表（TimescaleDB hypertable）
        readings  ── 按 channel 存储原始读数，保留 7 天
@@ -46,7 +46,10 @@ user
 | `channels` | id | 通道；唯一 (sensor_id, channel_code)；channel_type / unit / sampling_rate / position_offset / axis / alert_rules / is_active |
 | `alerts` | id | 告警；FK channels.id；level / is_resolved / 时间窗 |
 | `analysis_jobs` | id | 分析任务；FK channels.id；plugin / params / status / result_key |
+| `3d_models` | id | 3D 模型；FK subitems.id（一个子项多个模型）；original_key / glb_key / status（v0.8c） |
 | `platform_settings` | id=1 | 平台元数据（单行） |
+
+> v0.8c：`subitems.model_file_key` 列已删除（多模型方案下冗余），模型统一存 `3d_models` 表，GLB 经 `GET /api/v1/models/{id}/file` 下载。
 
 ### 告警生命周期（v0.8b）
 
@@ -133,6 +136,7 @@ SELECT add_retention_policy('readings', INTERVAL '7 days', if_not_exists => TRUE
 | `7c74c5b67148` | v0.7 | platform_settings |
 | `1e4cdedf9b41` | v0.8a | projects → subitems（术语重命名） |
 | `af5a7548852c` | v0.8b | sensors / channels / readings；drop sensor_raw / sensor_feature；alerts / analysis_jobs 改 channel_id |
+| `c4f21bee2f8b` | v0.8c | 3d_models 表；drop subitems.model_file_key |
 
 ## 6. 写入热路径（`app/services/data_service.py`）
 

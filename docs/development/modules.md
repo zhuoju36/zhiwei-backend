@@ -256,9 +256,23 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 
 - `GET /protocols` — 已注册协议适配器元信息（name/version/supports_batch）
 
-### 占位路由
+### `app/routers/models.py`（v0.8c 实现）
 
-`models.py` —— 3D 模型上传/转换（MinIO + 转换任务），router 与 prefix 已建，业务待补。
+- `POST /models/{subitem_id}/upload` — multipart 上传（子项写权限），格式白名单 obj/stl/ply/gltf/glb（**IFC 返回 400** `MODEL_FORMAT_UNSUPPORTED`），≤200MB；源文件存 MinIO 后建 `3d_models` 记录并触发转换任务，返回 `{model_id, status}`
+- `GET /models?subitem_id=...` — 一个子项多个模型的分页列表（读权限）
+- `GET /models/{id}` — 详情
+- `GET /models/{id}/file` — 返回转换后的 GLB（`model/gltf-binary`）；未完成 409 `MODEL_NOT_READY`
+- `DELETE /models/{id}` — admin；删记录 + 清理 MinIO 两个对象（失败仅记日志）
+
+### `app/services/model_service.py:ModelService`（v0.8c 新增）
+
+- `create / get / list_by_subitem / delete` — `3d_models` 表 CRUD
+- `mark_running / mark_success / mark_failed` — 状态机 pending → processing → success/failed
+
+### `app/tasks/model_tasks.py:convert_model_task`（v0.8c 新增）
+
+- `queue="reports"`，**不自动重试**（格式问题重试无意义；意外异常也回写 failed 避免悬挂）
+- 流程：下载 MinIO 源文件 → `scripts.model_convert.convert_bytes` → 上传 GLB → mark_success
 
 ## 插件体系
 

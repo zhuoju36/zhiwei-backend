@@ -94,6 +94,13 @@ async def get_bytes(key: str) -> bytes:
         return await resp["Body"].read()
 
 
+async def delete_object(key: str) -> None:
+    """删除对象。S3 DELETE 幂等：key 不存在也返回成功。"""
+    sess = _require_session()
+    async with sess.client("s3", **_client_kwargs()) as s3:
+        await s3.delete_object(Bucket=settings.minio_bucket, Key=key)
+
+
 async def put_json(key: str, obj: Any) -> None:
     await put_bytes(key, json.dumps(obj).encode("utf-8"), content_type="application/json")
 
