@@ -1,6 +1,6 @@
 [project]
 name = "shm-backend"
-version = "0.9.1"
+version = "0.9.2"
 description = "结构健康监测（SHM）平台后端"
 requires-python = ">=3.11"
 
