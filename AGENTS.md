@@ -1,6 +1,6 @@
 # AGENTS.md - 后端开发规范与指南
 
-> **项目**：结构健康监测（SHM）平台后端  
+> **项目**：知微结构健康监测（SHM）平台后端  
 > **技术栈**：Python 3.11+ | FastAPI | SQLAlchemy 2.0(async) | asyncpg | Pydantic v2 | Celery | TimescaleDB  
 > **核心约束**：**全异步**、**协议插件化**、**高频时序数据**、**1000测点级规模**
 > 全局架构详见 ../架构说明书.md
