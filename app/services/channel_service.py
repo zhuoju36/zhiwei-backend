@@ -97,6 +97,7 @@ class ChannelService:
             position_offset=payload.position_offset,
             axis=payload.axis,
             alert_rules=rules_dump,
+            note=payload.note,
         )
         db.add(channel)
         await db.flush()

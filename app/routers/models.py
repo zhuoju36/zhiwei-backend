@@ -7,7 +7,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import File, Query, UploadFile, status
+from fastapi import File, Form, Query, UploadFile, status
 from fastapi.responses import Response
 
 from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
@@ -40,6 +40,7 @@ async def upload_model(
     db: DbSession,
     current_user: CurrentUser,
     file: Annotated[UploadFile, File(description="源模型文件（.obj/.stl/.ply/.gltf/.glb）")],
+    note: Annotated[str | None, Form()] = None,
 ) -> ModelUploadOut:
     project = await db.get(Project, project_id)
     if project is None:
@@ -69,7 +70,9 @@ async def upload_model(
     original_key = f"models/{project_id}/{uuid.uuid4().hex}.{ext}"
     await minio_client.put_bytes(original_key, data)
 
-    model = await ModelService.create(db, project_id, original_key, name, ext, current_user.id)
+    model = await ModelService.create(
+        db, project_id, original_key, name, ext, current_user.id, note=note
+    )
     await db.commit()
     await db.refresh(model)
     model_id = model.id

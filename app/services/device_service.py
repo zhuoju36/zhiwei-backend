@@ -64,6 +64,7 @@ class DeviceService:
             device_name=payload.device_name,
             protocol=payload.protocol,
             config=payload.config,
+            note=payload.note,
         )
         db.add(device)
         await db.flush()

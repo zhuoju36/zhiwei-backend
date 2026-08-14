@@ -20,5 +20,6 @@ class ModelOut(BaseModel):
     glb_key: str | None
     status: str
     error: str | None
+    note: str | None
     created_at: datetime
     finished_at: datetime | None

@@ -69,6 +69,7 @@ class SensorService:
             last_calibration=payload.last_calibration,
             position=payload.position,
             metadata_=payload.metadata,
+            note=payload.note,
         )
         db.add(sensor)
         await db.flush()

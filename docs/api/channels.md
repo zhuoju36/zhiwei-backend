@@ -16,6 +16,7 @@
   "sampling_rate": 100,
   "position_offset": { "dx": 0.05, "dy": 0, "dz": 0 },
   "axis": "x",
+  "note": null,
   "alert_rules": [
     { "operator": "gt", "threshold": 0.5, "level": "warning", "suppress_seconds": 60 }
   ],

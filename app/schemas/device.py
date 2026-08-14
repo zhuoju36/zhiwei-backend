@@ -14,6 +14,7 @@ class DeviceCreate(BaseModel):
     device_name: str | None = Field(default=None, max_length=128)
     protocol: str = Field(min_length=1, max_length=32)
     config: dict[str, Any] = Field(default_factory=dict)
+    note: str | None = None
 
 
 class DeviceUpdate(BaseModel):
@@ -22,6 +23,7 @@ class DeviceUpdate(BaseModel):
     config: dict[str, Any] | None = None
     status: DeviceStatus | None = None
     last_seen: datetime | None = None
+    note: str | None = None
 
 
 class DeviceOut(BaseModel):
@@ -35,4 +37,5 @@ class DeviceOut(BaseModel):
     config: dict[str, Any]
     status: str
     last_seen: datetime | None
+    note: str | None
     created_at: datetime

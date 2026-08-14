@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 class Channel(Base):
     __tablename__ = "channels"
+    __table_args__ = (UniqueConstraint("sensor_id", "channel_code"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     sensor_id: Mapped[int] = mapped_column(ForeignKey("sensors.id"), nullable=False)
@@ -33,6 +34,7 @@ class Channel(Base):
     axis: Mapped[str | None] = mapped_column(String(8))  # "x" / "y" / "z"（3D 可视化用）
     alert_rules: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)  # 阈值告警规则
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    note: Mapped[str | None] = mapped_column(Text)  # 用户备注
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     sensor: Mapped[Sensor] = relationship(back_populates="channels")

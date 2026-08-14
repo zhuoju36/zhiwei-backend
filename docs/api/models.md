@@ -16,6 +16,7 @@
   "status": "success",
   "error": null,
   "created_at": "2026-08-14T10:00:00Z",
+  "note": null,
   "finished_at": "2026-08-14T10:00:01.500Z"
 }
 ```

@@ -21,6 +21,7 @@ class ModelService:
         original_name: str,
         source_format: str,
         user_id: int | None = None,
+        note: str | None = None,
     ) -> Model:
         model = Model(
             project_id=project_id,
@@ -29,6 +30,7 @@ class ModelService:
             source_format=source_format,
             status="pending",
             created_by=user_id,
+            note=note,
         )
         db.add(model)
         await db.flush()

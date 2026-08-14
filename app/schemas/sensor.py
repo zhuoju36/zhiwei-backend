@@ -27,6 +27,7 @@ class SensorCreate(BaseModel):
     last_calibration: date | None = None
     position: dict[str, Any] | None = None  # {x, y, z} 三维坐标
     metadata: dict[str, Any] | None = None
+    note: str | None = None
 
 
 class SensorUpdate(BaseModel):
@@ -39,6 +40,7 @@ class SensorUpdate(BaseModel):
     position: dict[str, Any] | None = None
     is_active: bool | None = None
     metadata: dict[str, Any] | None = None
+    note: str | None = None
 
 
 class SensorOut(BaseModel):
@@ -56,6 +58,7 @@ class SensorOut(BaseModel):
     position: dict[str, Any] | None
     is_active: bool
     metadata_: dict[str, Any] | None = Field(serialization_alias="metadata")
+    note: str | None
     created_at: datetime
 
 
@@ -68,6 +71,7 @@ class ChannelCreate(BaseModel):
     position_offset: dict[str, Any] | None = None
     axis: str | None = Field(default=None, max_length=8)
     alert_rules: list[AlertRule] | None = None
+    note: str | None = None
 
 
 class ChannelUpdate(BaseModel):
@@ -78,6 +82,7 @@ class ChannelUpdate(BaseModel):
     axis: str | None = Field(default=None, max_length=8)
     alert_rules: list[AlertRule] | None = None
     is_active: bool | None = None
+    note: str | None = None
 
 
 class ChannelOut(BaseModel):
@@ -93,4 +98,5 @@ class ChannelOut(BaseModel):
     axis: str | None
     alert_rules: list[dict[str, Any]] | None
     is_active: bool
+    note: str | None
     created_at: datetime

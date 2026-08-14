@@ -16,6 +16,7 @@
   "config": { "host": "http://...", "port": 9000 },
   "status": "online",
   "last_seen": "2026-08-13T12:00:00Z",
+  "note": null,
   "created_at": "2026-08-13T11:00:00Z"
 }
 ```

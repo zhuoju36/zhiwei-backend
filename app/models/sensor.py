@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,6 +39,7 @@ class Sensor(Base):
     last_calibration: Mapped[date | None] = mapped_column()
     position: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # {x, y, z} 三维坐标
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    note: Mapped[str | None] = mapped_column(Text)  # 用户备注
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

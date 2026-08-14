@@ -20,6 +20,7 @@ v0.9 起**测点（point）与传感器（sensor）合一**：实际部署中一
   "position": { "x": 0.0, "y": 0.0, "z": 15.0 },
   "is_active": true,
   "metadata": null,
+  "note": null,
   "created_at": "2026-08-14T10:00:00Z"
 }
 ```
