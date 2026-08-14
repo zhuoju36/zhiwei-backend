@@ -12,7 +12,12 @@ from app.dependencies import (
     check_subitem_write_access,
 )
 from app.models.channel import Channel
-from app.schemas.analysis import AnalysisJobCreate, AnalysisJobOut, AnalysisSubmitOut
+from app.schemas.analysis import (
+    AnalysisJobCreate,
+    AnalysisJobOut,
+    AnalysisPluginMeta,
+    AnalysisSubmitOut,
+)
 from app.schemas.base import PageSchema
 from app.services import analysis_service
 from app.services.data_service import check_channel_subitem
@@ -20,6 +25,30 @@ from app.tasks.analysis_tasks import run_analysis_job
 from app.utils import minio_client
 
 router = create_router(prefix="/analysis", tags=["分析"])
+
+
+@router.get("/plugins", response_model=list[AnalysisPluginMeta])
+async def list_plugins() -> list[AnalysisPluginMeta]:
+    """列出全部已注册的分析插件（含元信息与参数表单 schema）。"""
+    from app.plugins.analyzers.registry import AnalyzerRegistry
+
+    result = []
+    for name in AnalyzerRegistry.names():
+        cls = AnalyzerRegistry.get(name)
+        if cls is None:
+            continue
+        result.append(
+            AnalysisPluginMeta(
+                name=cls.name,
+                display_name=cls.display_name,
+                description=cls.description,
+                version=cls.version,
+                input_channels=cls.input_channels,
+                min_samples=cls.min_samples,
+                params_schema=cls.params_schema,
+            )
+        )
+    return result
 
 
 def _job_to_out(job) -> AnalysisJobOut:

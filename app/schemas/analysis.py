@@ -32,3 +32,15 @@ class AnalysisJobOut(BaseModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+
+
+class AnalysisPluginMeta(BaseModel):
+    """分析插件元信息（/analysis/plugins，前端渲染表单用）。"""
+
+    name: str
+    display_name: str
+    description: str
+    version: str
+    input_channels: int
+    min_samples: int
+    params_schema: dict[str, Any]

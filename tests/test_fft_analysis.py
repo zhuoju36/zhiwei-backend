@@ -1,10 +1,12 @@
-"""FFT 分析插件单元测试。"""
+"""FFT 分析插件单元测试（v2 接口契约）。"""
 
 import asyncio
+import io
 
 import numpy as np
 import pytest
 
+from app.plugins.analyzers.base import AnalysisInput
 from app.plugins.analyzers.fft_analysis import FftAnalysis
 
 
@@ -14,23 +16,36 @@ def _sine(freq_hz: float, sr: float, duration_s: float = 1.0) -> np.ndarray:
     return np.sin(2 * np.pi * freq_hz * t)
 
 
+def _run(plugin: FftAnalysis, data: np.ndarray, sr: float, config: dict | None = None):
+    return asyncio.run(
+        plugin.analyze(
+            AnalysisInput(
+                channel_ids=[1],
+                time_range=("2026-01-01T00:00:00Z", "2026-01-01T00:00:02Z"),
+                sampling_rate=sr,
+                data=data,
+            ),
+            config or {},
+        )
+    )
+
+
 def test_fft_detects_50hz_sine() -> None:
-    """50Hz 正弦信号在 100Hz 采样下应识别 dominant_freq 接近 50。"""
+    """50Hz 正弦信号在 200Hz 采样下应识别 dominant_freq 接近 50。"""
     plugin = FftAnalysis()
     sr = 200.0
     data = _sine(50.0, sr, duration_s=2.0)
-    result = asyncio.run(
-        plugin.analyze(
-            channel_id=1,
-            time_range=("2026-01-01T00:00:00Z", "2026-01-01T00:00:02Z"),
-            data=data,
-            config={"sampling_rate": sr},
-        )
-    )
-    assert abs(result["dominant_freq"] - 50.0) < 1.0
-    assert result["num_samples"] == 400
-    assert result["sampling_rate"] == sr
-    assert result["nyquist_freq"] == sr / 2
+    out = _run(plugin, data, sr)
+    summary = out.summary
+    assert abs(summary["dominant_freq"] - 50.0) < 1.0
+    assert summary["num_samples"] == 400
+    assert summary["sampling_rate"] == sr
+    assert summary["nyquist_freq"] == sr / 2
+    # NPZ 附件：含完整频谱
+    assert out.artifact is not None
+    npz = np.load(io.BytesIO(out.artifact))
+    assert "frequencies" in npz.files
+    assert "magnitudes" in npz.files
 
 
 def test_fft_finds_higher_harmonic() -> None:
@@ -38,40 +53,39 @@ def test_fft_finds_higher_harmonic() -> None:
     plugin = FftAnalysis()
     sr = 200.0
     data = _sine(150.0, sr, duration_s=2.0)
-    result = asyncio.run(
-        plugin.analyze(channel_id=1, time_range=("", ""), data=data, config={"sampling_rate": sr})
-    )
+    summary = _run(plugin, data, sr).summary
     # 150Hz 在 200Hz 采样下混叠为 200-150=50Hz
-    assert abs(result["dominant_freq"] - 50.0) < 1.0
+    assert abs(summary["dominant_freq"] - 50.0) < 1.0
 
 
-def test_fft_requires_sampling_rate() -> None:
+def test_fft_uses_channel_sampling_rate_when_config_missing() -> None:
+    """config 未给 sampling_rate 时，使用 AnalysisInput.sampling_rate（通道配置）。"""
     plugin = FftAnalysis()
-    data = _sine(10.0, 100.0)
-    with pytest.raises(ValueError):
-        asyncio.run(plugin.analyze(1, ("", ""), data, config={}))
+    sr = 200.0
+    data = _sine(50.0, sr, duration_s=2.0)
+    summary = _run(plugin, data, sr, config={}).summary
+    assert summary["sampling_rate"] == sr
+    assert abs(summary["dominant_freq"] - 50.0) < 1.0
 
 
 def test_fft_rejects_invalid_sampling_rate() -> None:
     plugin = FftAnalysis()
     data = _sine(10.0, 100.0)
     with pytest.raises(ValueError):
-        asyncio.run(plugin.analyze(1, ("", ""), data, config={"sampling_rate": 0}))
+        _run(plugin, data, 100.0, config={"sampling_rate": 0})
 
 
 def test_fft_rejects_too_short_data() -> None:
     plugin = FftAnalysis()
     with pytest.raises(ValueError):
-        asyncio.run(
-            plugin.analyze(1, ("", ""), data=np.array([1.0]), config={"sampling_rate": 100})
-        )
+        _run(plugin, np.array([1.0]), 100.0)
 
 
 def test_fft_warns_on_small_sample() -> None:
     plugin = FftAnalysis()
     data = _sine(10.0, 100.0, duration_s=0.2)  # 20 samples
-    result = asyncio.run(plugin.analyze(1, ("", ""), data=data, config={"sampling_rate": 100}))
-    assert "样本数过少" in result["warnings"][0]
+    warnings = _run(plugin, data, 100.0).summary["warnings"]
+    assert "样本数过少" in warnings[0]
 
 
 def test_fft_top_peaks_returns_list() -> None:
@@ -79,7 +93,6 @@ def test_fft_top_peaks_returns_list() -> None:
     sr = 200.0
     # 30Hz + 60Hz 叠加
     data = _sine(30.0, sr, duration_s=2.0) + 0.5 * _sine(60.0, sr, duration_s=2.0)
-    result = asyncio.run(plugin.analyze(1, ("", ""), data=data, config={"sampling_rate": sr}))
-    peaks = result["top_peaks"]
+    peaks = _run(plugin, data, sr).summary["top_peaks"]
     assert 1 <= len(peaks) <= 3
     assert peaks[0]["magnitude"] >= peaks[-1]["magnitude"]

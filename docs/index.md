@@ -13,6 +13,7 @@
 | [development/coding-standards.md](development/coding-standards.md) | 异步铁律、Pydantic / SQLAlchemy 用法、错误处理、提交前检查清单 |
 | [development/testing.md](development/testing.md) | 测试分层、pytest 约定、fixture、集成测试数据库策略 |
 | [development/simulation.md](development/simulation.md) | 无硬件模拟器使用指南（modbus_simulator / mqtt_injector / simulate_data） |
+| [development/plugin-dev.md](development/plugin-dev.md) | 分析插件开发指南（社区版）：接口契约、多通道、entry_points 发布 |
 | [development/deployment.md](development/deployment.md) | Docker 镜像、Compose 服务清单、生产环境建议 |
 
 ## API 文档（使用者）

@@ -168,3 +168,218 @@ async def test_job_list_with_filter(client: AsyncClient, admin_user: dict) -> No
         assert any(j["plugin"] == "fft" for j in items)
     finally:
         await _cleanup(proj_id, dev_id, channel_id)
+
+
+async def test_list_plugins(client: AsyncClient, admin_user: dict) -> None:
+    headers = await login_headers(client, admin_user["username"], admin_user["password"])
+    resp = await client.get("/api/v1/analysis/plugins", headers=headers)
+    assert resp.status_code == 200
+    plugins = {p["name"]: p for p in resp.json()["data"]}
+    assert "fft" in plugins
+    assert "statistics" in plugins
+    fft = plugins["fft"]
+    assert fft["display_name"] == "FFT 频谱分析"
+    assert fft["input_channels"] == 1
+    assert "sampling_rate" in fft["params_schema"]["properties"]
+
+
+async def test_submit_statistics_job(client: AsyncClient, admin_user: dict) -> None:
+    proj_id, dev_id, channel_id, _ = await _make_channel()
+    await _seed_readings(channel_id, freq=5.0, sr=100.0)
+    try:
+        headers = await login_headers(client, admin_user["username"], admin_user["password"])
+        resp = await client.post(
+            "/api/v1/analysis/jobs",
+            json={"channel_id": channel_id, "plugin": "statistics", "params": {}},
+            headers=headers,
+        )
+        assert resp.status_code == 201, resp.text
+        job_id = resp.json()["data"]["job_id"]
+        for _ in range(30):
+            resp = await client.get(f"/api/v1/analysis/jobs/{job_id}", headers=headers)
+            status = resp.json()["data"]["status"]
+            if status in ("success", "failed"):
+                break
+            await asyncio.sleep(0.2)
+        assert status == "success", resp.json()
+        summary = resp.json()["data"]["result_summary"]
+        assert summary["num_samples"] > 0
+        assert "mean" in summary and "rms" in summary
+        # statistics 无附件
+        assert resp.json()["data"]["result_key"] is None
+    finally:
+        await _cleanup(proj_id, dev_id, channel_id)
+
+
+async def _make_channel_pair() -> tuple[int, int, list[int]]:
+    """同一子项下两个通道（多通道分析测试用）。"""
+    s = uuid.uuid4().hex[:8]
+    async with AsyncSessionLocal() as db:
+        proj = Subitem(name=f"analysis-multi-{s}")
+        db.add(proj)
+        await db.flush()
+        device = Device(
+            subitem_id=proj.id, device_code=f"GW-M-{s}", protocol="http_json", config={}
+        )
+        db.add(device)
+        await db.flush()
+        point = Point(device_id=device.id, point_code=f"PT-M-{s}")
+        db.add(point)
+        await db.flush()
+        sensor = Sensor(point_id=point.id, sensor_code=f"S-M-{s}")
+        db.add(sensor)
+        await db.flush()
+        ch1 = Channel(sensor_id=sensor.id, channel_code=f"CH1-{s}", sampling_rate=100)
+        ch2 = Channel(sensor_id=sensor.id, channel_code=f"CH2-{s}", sampling_rate=100)
+        db.add_all([ch1, ch2])
+        await db.commit()
+        await db.refresh(ch1)
+        await db.refresh(ch2)
+        return proj.id, device.id, [ch1.id, ch2.id]
+
+
+async def _cleanup_channels(proj_id: int, dev_id: int, channel_ids: list[int]) -> None:
+    async with AsyncSessionLocal() as db:
+        for cid in channel_ids:
+            await db.execute(delete(AnalysisJob).where(AnalysisJob.channel_id == cid))
+            from app.models.reading import Reading
+
+            await db.execute(delete(Reading).where(Reading.channel_id == cid))
+        await db.execute(delete(Channel).where(Channel.id.in_(channel_ids)))
+        await db.execute(
+            delete(Sensor).where(
+                Sensor.point_id.in_(
+                    select(Point.id).where(Point.device_id == dev_id).scalar_subquery()
+                )
+            )
+        )
+        await db.execute(delete(Point).where(Point.device_id == dev_id))
+        await db.execute(delete(Device).where(Device.id == dev_id))
+        await db.execute(delete(Subitem).where(Subitem.id == proj_id))
+        await db.commit()
+
+
+async def test_multichannel_plugin_flow(client: AsyncClient, admin_user: dict) -> None:
+    from app.plugins.analyzers.base import AnalysisInput, AnalysisOutput, AnalysisPlugin
+
+    # 动态注册一个多通道插件（模拟社区插件通过 entry_points 接入）
+    class FakeMulti(AnalysisPlugin):
+        name = "fake_multi"
+        input_channels = 2
+        min_samples = 2
+
+        async def analyze(self, data: AnalysisInput, config: dict) -> AnalysisOutput:
+            arrays = data.data
+            return AnalysisOutput(
+                summary={
+                    "channels": sorted(int(k) for k in arrays),
+                    "lens": [int(len(v)) for v in arrays.values()],
+                }
+            )
+
+    from app.plugins.analyzers.registry import AnalyzerRegistry
+
+    AnalyzerRegistry._analyzers["fake_multi"] = FakeMulti
+    try:
+        proj_id, dev_id, ch_ids = await _make_channel_pair()
+        for cid in ch_ids:
+            await _seed_readings(cid, freq=5.0, sr=100.0)
+        try:
+            headers = await login_headers(client, admin_user["username"], admin_user["password"])
+            resp = await client.post(
+                "/api/v1/analysis/jobs",
+                json={
+                    "channel_id": ch_ids[0],
+                    "plugin": "fake_multi",
+                    "params": {"channel_ids": ch_ids},
+                },
+                headers=headers,
+            )
+            assert resp.status_code == 201, resp.text
+            job_id = resp.json()["data"]["job_id"]
+            for _ in range(30):
+                resp = await client.get(f"/api/v1/analysis/jobs/{job_id}", headers=headers)
+                status = resp.json()["data"]["status"]
+                if status in ("success", "failed"):
+                    break
+                await asyncio.sleep(0.2)
+            assert status == "success", resp.json()
+            summary = resp.json()["data"]["result_summary"]
+            assert sorted(summary["channels"]) == sorted(ch_ids)
+            assert all(n >= 1 for n in summary["lens"])
+        finally:
+            await _cleanup_channels(proj_id, dev_id, ch_ids)
+    finally:
+        AnalyzerRegistry._analyzers.pop("fake_multi", None)
+
+
+async def test_multichannel_cross_subitem_rejected(client: AsyncClient, admin_user: dict) -> None:
+    from app.plugins.analyzers.base import AnalysisInput, AnalysisOutput, AnalysisPlugin
+    from app.plugins.analyzers.registry import AnalyzerRegistry
+
+    class FakeMulti(AnalysisPlugin):
+        name = "fake_multi"
+        input_channels = 2
+        min_samples = 2
+
+        async def analyze(self, data: AnalysisInput, config: dict) -> AnalysisOutput:
+            return AnalysisOutput(summary={})
+
+    AnalyzerRegistry._analyzers["fake_multi"] = FakeMulti
+    try:
+        proj1, dev1, ch1, _ = await _make_channel()
+        proj2, dev2, ch2, _ = await _make_channel()
+        try:
+            headers = await login_headers(client, admin_user["username"], admin_user["password"])
+            resp = await client.post(
+                "/api/v1/analysis/jobs",
+                json={
+                    "channel_id": ch1,
+                    "plugin": "fake_multi",
+                    "params": {"channel_ids": [ch1, ch2]},
+                },
+                headers=headers,
+            )
+            assert resp.status_code == 201, resp.text
+            job_id = resp.json()["data"]["job_id"]
+            for _ in range(30):
+                resp = await client.get(f"/api/v1/analysis/jobs/{job_id}", headers=headers)
+                status = resp.json()["data"]["status"]
+                if status in ("success", "failed"):
+                    break
+                await asyncio.sleep(0.2)
+            assert status == "failed", resp.json()
+            assert "同一子项" in resp.json()["data"]["error"]
+        finally:
+            await _cleanup(proj1, dev1, ch1)
+            await _cleanup(proj2, dev2, ch2)
+    finally:
+        AnalyzerRegistry._analyzers.pop("fake_multi", None)
+
+
+async def test_channel_count_mismatch_failed(client: AsyncClient, admin_user: dict) -> None:
+    """单通道插件收到 2 个 channel_ids → 任务 failed。"""
+    proj_id, dev_id, channel_id, _ = await _make_channel()
+    try:
+        headers = await login_headers(client, admin_user["username"], admin_user["password"])
+        resp = await client.post(
+            "/api/v1/analysis/jobs",
+            json={
+                "channel_id": channel_id,
+                "plugin": "statistics",
+                "params": {"channel_ids": [channel_id, channel_id + 1]},
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 201, resp.text
+        job_id = resp.json()["data"]["job_id"]
+        for _ in range(30):
+            resp = await client.get(f"/api/v1/analysis/jobs/{job_id}", headers=headers)
+            status = resp.json()["data"]["status"]
+            if status in ("success", "failed"):
+                break
+            await asyncio.sleep(0.2)
+        assert status == "failed", resp.json()
+        assert "需要 1 个通道" in resp.json()["data"]["error"]
+    finally:
+        await _cleanup(proj_id, dev_id, channel_id)

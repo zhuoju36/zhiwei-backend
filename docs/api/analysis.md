@@ -1,8 +1,8 @@
 # 分析
 
-> v0.8.0 · 更新于 2026-08-13
+> v0.8d · 更新于 2026-08-14
 
-异步分析任务链路：用户提交任务 → Celery `analysis` 队列消费 → 插件计算 → 结果存 MinIO + 摘要回写数据库。v0.4 内置唯一插件为 **FFT**（频谱分析），后续按相同契约扩展。
+异步分析任务链路：用户提交任务 → Celery `analysis` 队列消费 → 插件计算 → 结果存 MinIO + 摘要回写数据库。内置插件：**FFT**（频谱分析，v0.4）、**statistics**（基础统计，v0.8d）；第三方插件经 Python entry_points（组 `shm_analyzers`）自动发现，详见 [插件开发指南](../development/plugin-dev.md)。
 
 ## 数据模型
 
@@ -13,7 +13,7 @@
   "plugin": "fft",
   "params": { "sampling_rate": 100.0 },
   "status": "success",
-  "result_key": "analysis/1/1.npz",
+  "result_key": "analysis/1/fft_1.npz",
   "result_summary": {
     "dominant_freq": 50.12,
     "dominant_magnitude": 0.4817,
@@ -35,10 +35,33 @@
 
 | 操作 | admin | 子项 write | 子项 read | 其他 |
 |------|-------|-----------|-----------|------|
+| `GET /analysis/plugins`（插件列表） | ✓ | ✓ | ✓ | ✗ |
 | `POST /analysis/jobs`（提交） | ✓ | ✓ | ✗ | ✗ |
 | `GET /analysis/jobs`（列表） | ✓ | ✓（限可见子项） | ✓ | ✗ |
 | `GET /analysis/jobs/{id}`（详情） | ✓ | ✓ | ✓ | ✗ |
-| `GET /analysis/jobs/{id}/result`（下载 NPZ） | ✓ | ✓ | ✓ | ✗ |
+| `GET /analysis/jobs/{id}/result`（下载附件） | ✓ | ✓ | ✓ | ✗ |
+
+---
+
+## GET /api/v1/analysis/plugins
+
+列出全部已注册分析插件的元信息（前端据此渲染"可用分析"列表与参数表单）。
+
+### 响应 200
+
+```json
+[
+  {
+    "name": "fft",
+    "display_name": "FFT 频谱分析",
+    "description": "快速傅里叶变换，输出主频、幅值谱与峰值列表（附件含完整频谱）",
+    "version": "2.0.0",
+    "input_channels": 1,
+    "min_samples": 2,
+    "params_schema": { "type": "object", "properties": { "sampling_rate": { "type": "number" } } }
+  }
+]
+```
 
 ---
 
@@ -59,8 +82,9 @@
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | `channel_id` | 是 | 目标通道 ID |
-| `plugin` | 是 | 已注册插件名（v0.4: `fft`） |
-| `params` | 否 | 插件参数；FFT 至少含 `sampling_rate`（Hz） |
+| `plugin` | 是 | 已注册插件名（v0.8d: `fft` / `statistics`） |
+| `params` | 否 | 插件参数（各插件 `params_schema` 见 `/analysis/plugins`） |
+| `params.channel_ids` | 多通道插件必填 | 参与分析的通道列表（须同一子项，数量 = 插件 `input_channels`） |
 | `params.start` / `params.end` | 否 | ISO8601 时间窗；省略则用全量数据 |
 
 ### 响应 201
@@ -142,18 +166,18 @@
 
 ## GET /api/v1/analysis/jobs/{job_id}/result
 
-下载完整结果（NPZ 二进制，含完整 `frequencies` 与 `magnitudes` 数组，用于前端绘图）。
+下载插件返回的完整附件（FFT 为 NPZ 二进制，含完整 `frequencies` 与 `magnitudes` 数组，用于前端绘图）。
 
 ### 响应 200
 
 ```
-Content-Type: application/octet-stream
-Content-Disposition: attachment; filename="job_{id}.npz"
+Content-Type: application/octet-stream（或插件声明的 artifact_type）
+Content-Disposition: attachment; filename="<插件 artifact_name>"
 
-<二进制 NumPy NPZ，含 frequencies, magnitudes, sampling_rate>
+<二进制附件>
 ```
 
-可用 `numpy.load(BytesIO(resp.content))` 解析。
+可用 `numpy.load(BytesIO(resp.content))` 解析 NPZ。
 
 ### 错误
 
@@ -212,15 +236,10 @@ plt.plot(data["frequencies"], data["magnitudes"])
 
 ## 插件开发指南
 
-新增分析插件：
+面向社区开发者的完整指南见 **[plugin-dev.md](../development/plugin-dev.md)**。
 
-1. 在 `app/plugins/analyzers/` 下新建 `<name>_analysis.py`
-2. 继承 `AnalysisPlugin`，设置类属性 `name = "<name>"`
-3. 实现 `async def analyze(self, channel_id, time_range, data, config) -> dict`
-4. 注册到 registry 自动发现（无需手动登记）
-5. 在 `docs/api/analysis.md` 添加插件说明（参数、结果格式）
-
-数据契约：
-- `data`：numpy.ndarray（一维），worker 会从 `sensor_raw` 按时间窗口取出
-- `config`：dict，至少含插件自定义字段；FFT 必含 `sampling_rate`
-- 返回 dict：可 JSON 序列化；如需返回大数组放 `_internal_*` 字段，task 会把对应 numpy 数组存入 NPZ
+要点（接口契约 v2）：
+1. 内置插件放 `app/plugins/analyzers/`（自动扫描）；第三方插件打包声明 entry point（组 `shm_analyzers`，pip install 即接入）
+2. 继承 `AnalysisPlugin`，声明元信息（`name / display_name / input_channels / min_samples / params_schema`）
+3. 实现 `async def analyze(self, data: AnalysisInput, config: dict) -> AnalysisOutput`
+4. 插件是纯计算单元：不接触数据库与实时流；参数校验失败抛 `ValueError` 即任务标记 failed

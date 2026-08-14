@@ -12,7 +12,7 @@
 - **统一 RBAC**：管理员 / 普通用户两级，用户-子项授权控制数据访问范围
 - **实时推送**：Redis Pub/Sub → WebSocket 广播，前端按子项订阅
 - **3D 模型管理**：子项多模型上传（OBJ/STL/PLY/glTF/GLB），后台自动转 GLB 供数字孪生加载
-- **模块化分析引擎**：FFT / 阈值告警 / 趋势预测等算法以插件形式注册
+- **模块化分析引擎**：FFT / 基础统计等算法以插件形式注册，社区可经 entry_points 接入自定义算法
 
 ## 技术栈
 
@@ -112,6 +112,14 @@ Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME`
 - Celery `reports` 队列后台转换（trimesh），`scripts/model_convert.py` 可独立 CLI 转换
 - IFC（BIM 格式）暂不支持，需 v0.9+ Blender/IfcOpenShell 转换器
 - 移除 `subitems.model_file_key` 冗余列，模型统一走 `3d_models` 表
+
+`v0.8d` — **分析插件接口 v2（面向社区）**：
+
+- `AnalysisPlugin` 契约升级：自描述元信息（`params_schema` 供前端动态表单）+ `AnalysisInput`/`AnalysisOutput` 显式数据结构，替代裸 dict 与 `_internal_*` 魔法字段
+- 插件 = 纯计算单元（数组 + 参数 → 摘要/附件），不接触数据库与实时流；阈值告警保持系统基础功能（数据驱动，不插件化）
+- **双层注册表**：内置目录扫描 + Python entry_points（组 `shm_analyzers`），社区 `pip install` 即接入，含版本守卫（`plugin_api_version`）
+- **多通道支持**：`input_channels=N` 声明式拉取（限同子项），为模态分析铺路
+- 新增 `GET /api/v1/analysis/plugins` 元信息接口；内置 `statistics` 示例插件；社区开发指南见 `docs/development/plugin-dev.md`
 
 `v0.5.0` 之前的累计能力：WS 子项权限校验、告警抑制（per-rule suppress_seconds）、多渠道通知（Webhook + Email）、modbus_tcp/mqtt 协议适配器、FFT 分析 + Celery `analysis` + MinIO、JWT 认证、阈值告警 + WebSocket 推送、TimescaleDB hypertable。
 

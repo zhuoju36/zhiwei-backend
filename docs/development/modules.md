@@ -301,15 +301,16 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 3. 类属性 `name` 必须与 `devices.protocol` 字段值匹配
 4. 无需手动注册，自动扫描
 
-### `app/plugins/analyzers/`
+### `app/plugins/analyzers/`（v0.8d 接口 v2）
 
-- `base.py` — `AnalysisPlugin` 抽象基类（接口契约）
-- `registry.py` — `AnalyzerRegistry.discover()` 同上
-- `fft_analysis.py`（v0.4 新增）— `FftAnalysis`
-  - 输入：numpy ndarray + `sampling_rate`
-  - 输出：JSON 摘要（dominant_freq / dominant_magnitude / top_peaks / 警告）+ 完整 NPZ（频率 + 幅值）存 MinIO
+- `base.py` — `AnalysisPlugin` 抽象基类（接口契约 v2）+ `AnalysisInput` / `AnalysisOutput` dataclass
+  - 自描述元信息：`name / display_name / description / version / plugin_api_version / input_channels / min_samples / params_schema`
+  - 插件 = 纯计算单元（输入数组 + 参数 → 摘要/附件），不接触数据库与实时流；面向社区开发者的指南见 [plugin-dev.md](plugin-dev.md)
+- `registry.py` — 双层发现：内置目录扫描 + Python entry_points（组 `shm_analyzers`，pip install 即接入）；版本守卫（`plugin_api_version` 不匹配拒绝加载）、同名保留先注册者
+- `fft_analysis.py` — `FftAnalysis`（v2 改造）：JSON 摘要 + NPZ 附件显式返回（`AnalysisOutput.artifact`）；`sampling_rate` 缺省取通道配置
+- `statistics.py`（v0.8d 新增）— `StatisticsAnalysis`：基础统计（均值/峰值/RMS），社区插件最小示例
 
-具体插件（trend_predict / modal_analysis）在 v0.5+ 补。
+`GET /api/v1/analysis/plugins` 返回全部插件元信息（含 `params_schema`，前端动态表单）。trend_predict / modal_analysis 待社区或后续版本补充。
 
 ## 异步任务
 
@@ -336,7 +337,11 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 - 测试用 `task_always_eager=True`（`tests/conftest.py` autouse fixture 开启）
 - 文件顶部 `nest_asyncio.apply()` 允许在已有事件循环中运行 `asyncio.run()`（兼容测试异步上下文）
 
-其他任务模块当前为占位，按需在对应文件加 `@shared_task(queue="...")` 函数。
+### `app/tasks/analysis_tasks.py`
+
+- `@shared_task(queue="analysis") def run_analysis_job(job_id)`
+- 流程（v0.8d 接口 v2）：按插件 `input_channels` 拉取通道数据（多通道限同子项，JOIN channel→sensor→point→device 校验）→ `plugin.analyze(AnalysisInput, config)` → `AnalysisOutput.summary` 回写 `result_summary`、`artifact` 上传 MinIO（`analysis/{job_id}/{artifact_name}`）
+- 前置校验：`plugin_api_version`、通道数量、`min_samples`；插件参数校验失败（`ValueError`）→ 任务 `failed` 并记录错误
 
 ## WebSocket
 

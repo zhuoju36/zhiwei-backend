@@ -81,9 +81,6 @@ async def mark_success(
     job = await get_job(db, job_id)
     job.status = "success"
     job.result_key = result_key
-    # 摘要中可能包含 _internal_* 字段，移除
-    if result_summary:
-        result_summary = {k: v for k, v in result_summary.items() if not k.startswith("_internal_")}
     job.result_summary = result_summary
     job.finished_at = datetime.now(UTC)
     await db.flush()

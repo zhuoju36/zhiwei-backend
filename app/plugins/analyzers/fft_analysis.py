@@ -1,61 +1,60 @@
-"""FFT 频谱分析插件。
+"""FFT 频谱分析插件（v2 接口示例）。
 
-签名遵循 AnalysisPlugin.analyze(channel_id, time_range, data, config) -> dict。
-
-输入：data 为 numpy.ndarray（一维等间隔采样），config 至少含 sampling_rate。
-返回：JSON 友好的 dict（含 dominant_freq / dominant_magnitude / num_samples / sampling_rate），
-     完整频率/幅值数组以 NumPy .npz 二进制存 MinIO（由调用方负责上传）。
+输入：AnalysisInput（一维等间隔采样数组 + sampling_rate）。
+输出：JSON 摘要（dominant_freq 等）+ NPZ 附件（完整频率/幅值数组）。
 """
 
+import io
 from typing import Any
 
 import numpy as np
 from scipy.fft import rfft, rfftfreq
 
-from app.plugins.analyzers.base import AnalysisPlugin
+from app.plugins.analyzers.base import AnalysisInput, AnalysisOutput, AnalysisPlugin
 
 
 class FftAnalysis(AnalysisPlugin):
     name = "fft"
-    input_type = "raw"
-    output_type = "json"
+    display_name = "FFT 频谱分析"
+    description = "快速傅里叶变换，输出主频、幅值谱与峰值列表（附件含完整频谱）"
+    version = "2.0.0"
+    input_channels = 1
+    min_samples = 2
+    params_schema = {
+        "type": "object",
+        "properties": {
+            "sampling_rate": {
+                "type": "number",
+                "description": "采样率（Hz），缺省用通道配置的 sampling_rate",
+                "exclusiveMinimum": 0,
+            }
+        },
+    }
 
-    async def analyze(
-        self,
-        channel_id: int,
-        time_range: tuple,
-        data: np.ndarray,
-        config: dict[str, Any],
-    ) -> dict[str, Any]:
-        if "sampling_rate" not in config:
-            raise ValueError("config 必须包含 sampling_rate")
-        sr = float(config["sampling_rate"])
+    async def analyze(self, data: AnalysisInput, config: dict[str, Any]) -> AnalysisOutput:
+        arr = np.asarray(data.data, dtype=np.float64)
+        if arr.size < 2:
+            raise ValueError("data 长度不足以做 FFT")
+        sr = float(config.get("sampling_rate", data.sampling_rate))
         if sr <= 0:
             raise ValueError("sampling_rate 必须 > 0")
-        if data is None or len(data) < 2:
-            raise ValueError("data 长度不足以做 FFT")
 
-        data = np.asarray(data, dtype=np.float64)
-        n = data.size
+        n = arr.size
         # 去直流，避免 0Hz 占主导
-        data = data - data.mean()
-        spectrum = np.abs(rfft(data)) / n
+        arr = arr - arr.mean()
+        spectrum = np.abs(rfft(arr)) / n
         freqs = rfftfreq(n, d=1.0 / sr)
 
         idx = int(np.argmax(spectrum))
         dominant_freq = float(freqs[idx])
         dominant_magnitude = float(spectrum[idx])
 
-        # 警告：样本数过少
         warnings: list[str] = []
         if n < 64:
             warnings.append("样本数过少（<64），频谱分辨率低")
 
-        # 非等间隔采样的探测：data 相邻差值不均暗示了异常（仅基础检查）
-        # 真实非等间隔需结合 time_range；此处省略（v0.5+ 完善）
-
-        return {
-            "channel_id": channel_id,
+        summary: dict[str, Any] = {
+            "channel_id": data.channel_ids[0],
             "sampling_rate": sr,
             "num_samples": n,
             "dominant_freq": dominant_freq,
@@ -64,10 +63,23 @@ class FftAnalysis(AnalysisPlugin):
             "freq_resolution": sr / n,
             "top_peaks": _top_peaks(freqs, spectrum, n_peaks=3),
             "warnings": warnings,
-            # 内部：调用方（Celery task）会取出频谱/幅值并上传 .npz
-            "_internal_frequencies": freqs.tolist(),
-            "_internal_magnitudes": spectrum.tolist(),
         }
+
+        # NPZ 附件：完整频谱供前端绘图 / 深度分析
+        npz_buf = io.BytesIO()
+        np.savez(
+            npz_buf,
+            frequencies=freqs,
+            magnitudes=spectrum,
+            sampling_rate=sr,
+            channel_id=data.channel_ids[0],
+        )
+        return AnalysisOutput(
+            summary=summary,
+            artifact=npz_buf.getvalue(),
+            artifact_name=f"fft_{data.channel_ids[0]}.npz",
+            artifact_type="application/octet-stream",
+        )
 
 
 def _top_peaks(freqs: np.ndarray, spectrum: np.ndarray, n_peaks: int = 3) -> list[dict[str, float]]:
