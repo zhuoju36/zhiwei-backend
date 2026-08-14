@@ -28,11 +28,11 @@ from app.tasks.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 
-async def _publish_alert(project_id: int, alert_payload: dict[str, Any]) -> None:
+async def _publish_alert(subitem_id: int, alert_payload: dict[str, Any]) -> None:
     try:
         rds = await get_redis()
         await rds.publish(
-            f"project:{project_id}",
+            f"subitem:{subitem_id}",
             json.dumps({"type": "data:alert", "payload": alert_payload}),
         )
     except Exception:
@@ -74,12 +74,12 @@ async def _process_readings(readings: list[dict[str, Any]]) -> None:
         # 批量取 alert_rules 与 device→project 映射（一次 JOIN）
         rows = (
             await db.execute(
-                select(Point.id, Point.alert_rules, Device.project_id)
+                select(Point.id, Point.alert_rules, Device.subitem_id)
                 .join(Device, Device.id == Point.device_id)
                 .where(Point.id.in_(point_ids))
             )
         ).all()
-        meta = {pid: (rules or [], project_id) for pid, rules, project_id in rows}
+        meta = {pid: (rules or [], subitem_id) for pid, rules, subitem_id in rows}
 
         for reading in readings:
             pid = reading.get("point_id")
@@ -87,8 +87,8 @@ async def _process_readings(readings: list[dict[str, Any]]) -> None:
             ts_raw = reading.get("timestamp")
             if pid is None or value is None:
                 continue
-            rules, project_id = meta.get(pid, ([], None))
-            if project_id is None or not rules:
+            rules, subitem_id = meta.get(pid, ([], None))
+            if subitem_id is None or not rules:
                 continue
             ts = _parse_ts(ts_raw)
 
@@ -101,7 +101,7 @@ async def _process_readings(readings: list[dict[str, Any]]) -> None:
                 if closed is not None:
                     await db.commit()
                     await _publish_alert(
-                        project_id,
+                        subitem_id,
                         {
                             "alert_id": closed.id,
                             "point_id": pid,
@@ -116,7 +116,7 @@ async def _process_readings(readings: list[dict[str, Any]]) -> None:
                 alert, created = await alert_service.trigger_alert(db, pid, event, ts)
                 await db.commit()
                 await _publish_alert(
-                    project_id,
+                    subitem_id,
                     {
                         "alert_id": alert.id,
                         "point_id": pid,
@@ -139,7 +139,7 @@ async def _process_readings(readings: list[dict[str, Any]]) -> None:
                         payload: AlertPayload = {
                             "alert_id": alert.id,
                             "point_id": pid,
-                            "project_id": project_id,
+                            "subitem_id": subitem_id,
                             "level": event.level,
                             "value": event.value,
                             "threshold": event.threshold,

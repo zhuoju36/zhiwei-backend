@@ -9,8 +9,8 @@
 
 - **多协议设备接入**：协议适配器插件化（Modbus / MQTT / OPC-UA / HTTP JSON …），边缘网关与云端共用同一套接口契约
 - **高频时序数据**：1000+ 测点级规模，asyncpg COPY 批量写入，1 分钟连续聚合自动降采样
-- **统一 RBAC**：管理员 / 普通用户两级，用户-项目授权控制数据访问范围
-- **实时推送**：Redis Pub/Sub → WebSocket 广播，前端按项目订阅
+- **统一 RBAC**：管理员 / 普通用户两级，用户-子项授权控制数据访问范围
+- **实时推送**：Redis Pub/Sub → WebSocket 广播，前端按子项订阅
 - **模块化分析引擎**：FFT / 阈值告警 / 趋势预测等算法以插件形式注册
 
 ## 技术栈
@@ -71,7 +71,7 @@ Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME`
 - **使用者**
   - [API 概览与鉴权](docs/api/overview.md)
   - [认证](docs/api/auth.md)
-  - [项目](docs/api/projects.md)
+  - [子项](docs/api/projects.md)
   - [设备](docs/api/devices.md)
   - [测点](docs/api/points.md)
   - [协议](docs/api/protocols.md)
@@ -84,15 +84,15 @@ Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME`
   - [平台元数据](docs/api/platform.md)
   - [用户管理](docs/api/users.md)
 
-## 项目状态
+## 子项状态
 
-`v0.7.0` — 在 `v0.5.0` 基础上补齐**首次部署引导**：
+`v0.8.0` — 在 `v0.5.0` 基础上补齐**首次部署引导**：
 
 - 后端 `GET/POST /api/v1/setup/*` 端点（无认证 + 严格 `users` 表空守卫）：前端 setup 页面或 CLI 创建首个 admin
 - 密码策略：≥8 字符 + 至少一个字母 + 一个数字（Pydantic schema + service 双重校验）
 - `scripts/init_admin.py` 替换 `scripts/seed.py`（已删除）：交互 / env 双模式，幂等
 - `docker/entrypoint.sh` + compose 改 entrypoint：env 传入 `ADMIN_USERNAME`/`ADMIN_PASSWORD` 时自动 init
 
-`v0.5.0` 之前的累计能力：WS 项目权限校验、告警抑制（per-rule suppress_seconds）、多渠道通知（Webhook + Email）、modbus_tcp/mqtt 协议适配器、FFT 分析 + Celery `analysis` + MinIO、JWT 认证、阈值告警 + WebSocket 推送、TimescaleDB hypertable + 连续聚合。
+`v0.5.0` 之前的累计能力：WS 子项权限校验、告警抑制（per-rule suppress_seconds）、多渠道通知（Webhook + Email）、modbus_tcp/mqtt 协议适配器、FFT 分析 + Celery `analysis` + MinIO、JWT 认证、阈值告警 + WebSocket 推送、TimescaleDB hypertable + 连续聚合。
 
-尚未实现：每项目通知通道配置（v0.7+）、钉钉/企微/Slack 专属 payload、modbus_rtu/opcua 适配器、3D 模型上传、模态/趋势预测分析插件、首次登录强制改密码、zxcvbn 密码强度评分、完整边缘网关进程、审计日志。
+尚未实现：每子项通知通道配置（v0.7+）、钉钉/企微/Slack 专属 payload、modbus_rtu/opcua 适配器、3D 模型上传、模态/趋势预测分析插件、首次登录强制改密码、zxcvbn 密码强度评分、完整边缘网关进程、审计日志。

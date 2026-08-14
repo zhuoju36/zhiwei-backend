@@ -1,6 +1,6 @@
 # 时序数据
 
-> v0.7.0 · 更新于 2026-08-13
+> v0.8.0 · 更新于 2026-08-13
 
 边缘网关通过 `/data/ingest` 上报传感器读数，前端通过 `/data/timeseries`、`/data/latest`、`/ws/data` 消费数据。
 
@@ -9,7 +9,7 @@
 | 接口 | 鉴权 | 谁能调用 |
 |------|------|----------|
 | `POST /data/ingest` | `X-API-Key` | 边缘网关（持有 EDGE_API_KEY） |
-| `GET /data/timeseries` | JWT Bearer | 已被授权对应项目的用户或 admin |
+| `GET /data/timeseries` | JWT Bearer | 已被授权对应子项的用户或 admin |
 | `GET /data/latest/{point_id}` | JWT Bearer | 同上 |
 | `WS /ws/data` | JWT in query (`?token=`) | 登录用户 |
 
@@ -164,7 +164,7 @@ curl -X POST http://localhost:8000/api/v1/data/ingest \
 | HTTP | code | 说明 |
 |------|------|------|
 | 401 | `AUTH_ERROR` | 未登录或 token 失效 |
-| 403 | `FORBIDDEN` | 未被授权访问该测点所属项目 |
+| 403 | `FORBIDDEN` | 未被授权访问该测点所属子项 |
 | 404 | `POINT_NOT_FOUND` | 测点不存在 |
 | 503 | `AGGREGATE_NOT_READY` | 聚合视图未初始化（需执行 `scripts/init_db.py`） |
 
@@ -218,7 +218,7 @@ curl -G http://localhost:8000/api/v1/data/timeseries \
 
 ## WS /ws/data
 
-WebSocket 实时推送。客户端订阅项目频道后，接收该项目的实时读数与告警。
+WebSocket 实时推送。客户端订阅子项频道后，接收该子项的实时读数与告警。
 
 ### 连接
 
@@ -228,7 +228,7 @@ ws://<host>/ws/data?token=<access_token>
 
 ### 客户端 → 服务端
 
-订阅项目：
+订阅子项：
 
 ```json
 { "type": "cmd:subscribe", "project_id": 1 }
@@ -257,7 +257,7 @@ ws://<host>/ws/data?token=<access_token>
 }
 ```
 
-告警事件（由 Celery `alerts` 队列异步推送，前端在订阅项目频道后接收）：
+告警事件（由 Celery `alerts` 队列异步推送，前端在订阅子项频道后接收）：
 
 ```json
 {
@@ -285,7 +285,7 @@ ws://<host>/ws/data?token=<access_token>
 ### 错误
 
 - 连接时 token 无效 / 过期：服务关闭连接（close code `4401`）
-- 项目 ID 无效：当前不主动通知客户端；建议前端校验后发送
+- 子项 ID 无效：当前不主动通知客户端；建议前端校验后发送
 
 ### 客户端示例（Python）
 
@@ -306,7 +306,7 @@ asyncio.run(main())
 
 ### 注意事项
 
-- 当前 WebSocket 端点**未做项目权限校验**（`endpoints.py` 注释标注 `TODO`）。生产前必须补充，否则持有 JWT 的用户可订阅任意项目
+- 当前 WebSocket 端点**未做子项权限校验**（`endpoints.py` 注释标注 `TODO`）。生产前必须补充，否则持有 JWT 的用户可订阅任意子项
 - 多实例部署时实时推送通过 Redis Pub/Sub 跨实例广播（`app/ws/manager.py`），无需额外配置
 - 单测点推送频率受边缘网关采集频率影响；前端展示时建议按时间窗口合并渲染
 - 告警事件由 `app/tasks/alert_tasks.py` 在 `POST /data/ingest` 完成后异步推送，与实时数据共享同一 Redis 频道

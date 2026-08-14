@@ -12,18 +12,18 @@ from app.database import AsyncSessionLocal
 from app.models.analysis import AnalysisJob
 from app.models.device import Device
 from app.models.point import Point
-from app.models.project import Project
+from app.models.subitem import Subitem
 from tests.conftest import login_headers
 
 
 async def _make_point() -> tuple[int, int, int, str]:
     s = uuid.uuid4().hex[:8]
     async with AsyncSessionLocal() as db:
-        proj = Project(name=f"analysis-test-{s}")
+        proj = Subitem(name=f"analysis-test-{s}")
         db.add(proj)
         await db.flush()
         device = Device(
-            project_id=proj.id,
+            subitem_id=proj.id,
             device_code=f"GW-A-{s}",
             protocol="http_json",
             config={},
@@ -62,7 +62,7 @@ async def _seed_sensor_raw(point_id: int, freq: float, sr: float, duration_s: fl
 
 
 async def test_submit_and_get_fft_job(client: AsyncClient, admin_user: dict) -> None:
-    project_id, device_id, point_id, _ = await _make_point()
+    subitem_id, device_id, point_id, _ = await _make_point()
     seeded = await _seed_sensor_raw(point_id, freq=50.0, sr=100.0)
     try:
         headers = await login_headers(client, admin_user["username"], admin_user["password"])
@@ -107,12 +107,12 @@ async def test_submit_and_get_fft_job(client: AsyncClient, admin_user: dict) -> 
             await db.execute(delete(AnalysisJob).where(AnalysisJob.point_id == point_id))
             await db.execute(delete(Point).where(Point.id == point_id))
             await db.execute(delete(Device).where(Device.id == device_id))
-            await db.execute(delete(Project).where(Project.id == project_id))
+            await db.execute(delete(Subitem).where(Subitem.id == subitem_id))
             await db.commit()
 
 
 async def test_submit_unknown_plugin_rejected(client: AsyncClient, admin_user: dict) -> None:
-    project_id, device_id, point_id, _ = await _make_point()
+    subitem_id, device_id, point_id, _ = await _make_point()
     try:
         headers = await login_headers(client, admin_user["username"], admin_user["password"])
         resp = await client.post(
@@ -130,12 +130,12 @@ async def test_submit_unknown_plugin_rejected(client: AsyncClient, admin_user: d
         async with AsyncSessionLocal() as db:
             await db.execute(delete(Point).where(Point.id == point_id))
             await db.execute(delete(Device).where(Device.id == device_id))
-            await db.execute(delete(Project).where(Project.id == project_id))
+            await db.execute(delete(Subitem).where(Subitem.id == subitem_id))
             await db.commit()
 
 
 async def test_job_list_with_filter(client: AsyncClient, admin_user: dict) -> None:
-    project_id, device_id, point_id, _ = await _make_point()
+    subitem_id, device_id, point_id, _ = await _make_point()
     headers = await login_headers(client, admin_user["username"], admin_user["password"])
     # 创建 job
     await client.post(
@@ -154,5 +154,5 @@ async def test_job_list_with_filter(client: AsyncClient, admin_user: dict) -> No
             await db.execute(delete(AnalysisJob).where(AnalysisJob.point_id == point_id))
             await db.execute(delete(Point).where(Point.id == point_id))
             await db.execute(delete(Device).where(Device.id == device_id))
-            await db.execute(delete(Project).where(Project.id == project_id))
+            await db.execute(delete(Subitem).where(Subitem.id == subitem_id))
             await db.commit()

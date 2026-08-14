@@ -1,6 +1,6 @@
 # 测点
 
-> v0.7.0 · 更新于 2026-08-13
+> v0.8.0 · 更新于 2026-08-13
 
 传感器在设备上的具体监测位置。测点配置 `alert_rules` 后，每次数据接入会触发阈值评估并可能产生告警（见 [alerts.md](alerts.md)）。
 
@@ -52,19 +52,19 @@ interface AlertRule {
 
 ## 权限
 
-与设备相同（项目级访问 / 写权限；删除需全局 admin）。
+与设备相同（子项级访问 / 写权限；删除需全局 admin）。
 
 ---
 
 ## GET /api/v1/points
 
-按项目或设备分页列出测点。**`project_id` 与 `device_id` 至少传一个**。
+按子项或设备分页列出测点。**`project_id` 与 `device_id` 至少传一个**。
 
 ### Query
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
-| `project_id` | 互斥 | 按项目筛选 |
+| `project_id` | 互斥 | 按子项筛选 |
 | `device_id` | 互斥 | 按设备筛选 |
 | `page` / `size` | 否 | 分页 |
 
@@ -87,7 +87,7 @@ interface AlertRule {
 | HTTP | code | 说明 |
 |------|------|------|
 | 400 | `BAD_REQUEST` | project_id 与 device_id 都未传 |
-| 403 | `FORBIDDEN` | 未被授权访问所属项目 |
+| 403 | `FORBIDDEN` | 未被授权访问所属子项 |
 
 ---
 
@@ -121,7 +121,7 @@ interface AlertRule {
 
 | HTTP | code | 说明 |
 |------|------|------|
-| 403 | `FORBIDDEN` | 无设备所属项目的写权限 |
+| 403 | `FORBIDDEN` | 无设备所属子项的写权限 |
 | 404 | `DEVICE_NOT_FOUND` | 设备不存在 |
 | 409 | `POINT_CODE_EXISTS` | 同设备下 point_code 已存在 |
 | 422 | `VALIDATION_ERROR` | alert_rules 中 operator / level 非法 |

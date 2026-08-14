@@ -5,7 +5,7 @@ from app.models.analysis import AnalysisJob
 from app.models.base import Base
 from app.models.device import Device
 from app.models.point import Point
-from app.models.project import Project, UserProject
+from app.models.subitem import Subitem, UserSubitem  # noqa: F401  (re-exported via __all__)
 from app.models.timeseries import SensorFeature, SensorRaw
 from app.models.user import User
 
@@ -15,7 +15,7 @@ __all__ = [
     "Base",
     "Device",
     "Point",
-    "Project",
+    "Subitem",
     "SensorFeature",
     "SensorRaw",
     "User",

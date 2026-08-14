@@ -10,7 +10,7 @@ class AlertPayload(TypedDict, total=False):
 
     alert_id: int
     point_id: int
-    project_id: int
+    subitem_id: int
     level: str
     value: float
     threshold: float

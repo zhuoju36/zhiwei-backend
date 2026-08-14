@@ -1,6 +1,6 @@
 # 模块技术说明
 
-> SHM 平台后端 v0.7.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.8.0 · 更新于 2026-08-13
 >
 > 逐模块说明 `app/` 下各子包的关键类、职责与调用关系。
 
@@ -86,7 +86,7 @@ Pydantic BaseSettings，从 `.env` 加载（`env_file=".env"`）。`asyncpg_dsn`
 - `CurrentUser = Annotated[User, Depends(get_current_user)]` — JWT 解析 + 用户加载
 - `AdminUser = Annotated[User, Depends(require_admin)]` — 角色校验
 - `verify_api_key` — 边缘网关 `X-API-Key` Header 校验
-- `check_project_access(db, user, project_id)` — 普通用户必须有 `user_projects` 记录，admin 放行
+- `check_project_access(db, user, project_id)` — 普通用户必须有 `user_subitems` 记录，admin 放行
 
 OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)`，未带 token 抛 AuthException(401)。
 
@@ -125,7 +125,7 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 ### `app/services/device_service.py:DeviceService`
 
 - `get(db, id)` / `list_by_project(db, project_id, page, size)` / `create / update / delete`
-- 创建时校验项目存在 + `device_code` 全局唯一（409 `DEVICE_CODE_EXISTS`）
+- 创建时校验子项存在 + `device_code` 全局唯一（409 `DEVICE_CODE_EXISTS`）
 
 ### `app/services/point_service.py:PointService`
 
@@ -147,9 +147,9 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 - `list_alerts(db, query)` / `get_alert` / `acknowledge_alert` — 列表（支持 project/point/level/resolved/时间窗）、详情、确认（设置 `ended_at/resolved_by/is_resolved`，并发二次确认返回 `409 ALERT_ALREADY_RESOLVED`）
 - `to_out_dict(alert)` — 模型 → JSON 安全的 dict
 
-### `app/services/project_service.py:ProjectService`
+### `app/services/project_service.py:SubitemService`
 
-- `list_projects(db, user, page, size)` — admin 看全量，普通用户 join `user_projects` 过滤
+- `list_projects(db, user, page, size)` — admin 看全量，普通用户 join `user_subitems` 过滤
 - `get/create/update/delete` — 基础 CRUD
 - `assign_user(db, project_id, user_id, permission)` — 重复授权更新 permission
 
@@ -172,19 +172,19 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 - `POST /auth/login` — OAuth2PasswordRequestForm → TokenOut
 - `POST /auth/refresh` — RefreshIn → 新 TokenOut
 
-### `app/routers/projects.py`
+### `app/routers/subitems.py`
 
-- `GET /projects` — 分页列表（admin 全量 / 用户受限）
-- `POST /projects` — admin 创建
-- `GET /projects/{id}` — 受限详情
-- `PUT /projects/{id}` — admin 更新
-- `DELETE /projects/{id}` — admin 删除（204）
-- `POST /projects/{id}/users` — admin 授权（204）
+- `GET /subitems` — 分页列表（admin 全量 / 用户受限）
+- `POST /subitems` — admin 创建
+- `GET /subitems/{id}` — 受限详情
+- `PUT /subitems/{id}` — admin 更新
+- `DELETE /subitems/{id}` — admin 删除（204）
+- `POST /subitems/{id}/users` — admin 授权（204）
 
 ### `app/routers/devices.py`
 
-- `GET /devices?project_id=...` — 按项目分页列表（项目成员可见）
-- `POST /devices` — 创建（项目写权限）
+- `GET /devices?project_id=...` — 按子项分页列表（子项成员可见）
+- `POST /devices` — 创建（子项写权限）
 - `GET /devices/{id}` / `PUT /devices/{id}` / `DELETE /devices/{id}`（删除需 admin）
 
 ### `app/routers/points.py`
@@ -197,7 +197,7 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 
 - `GET /alerts` — 列表（分页 + `project_id/point_id/level/is_resolved/start/end` 过滤）
 - `GET /alerts/{id}` — 详情
-- `POST /alerts/{id}/acknowledge` — 确认（项目 admin 权限）
+- `POST /alerts/{id}/acknowledge` — 确认（子项 admin 权限）
 
 ### `app/routers/dashboard.py`
 
@@ -304,6 +304,6 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 ### `scripts/`
 
 - `init_db.py` — TimescaleDB 初始化（幂等，可重入）
-- `seed.py` — 种子数据（admin/演示项目/设备/测点）
+- `seed.py` — 种子数据（admin/演示子项/设备/测点）
 
-**注意**：脚本需以模块方式运行（`python -m scripts.init_db`），因为脚本需要项目根在 `sys.path`。
+**注意**：脚本需以模块方式运行（`python -m scripts.init_db`），因为脚本需要子项根在 `sys.path`。

@@ -10,7 +10,7 @@ from app.database import AsyncSessionLocal
 from app.models.alert import Alert
 from app.models.device import Device
 from app.models.point import Point
-from app.models.project import Project
+from app.models.subitem import Subitem
 from app.services.alert_service import (
     TriggerEvent,
     upsert_alert,
@@ -23,11 +23,11 @@ async def _make_point_with_alert_rules(
 ) -> tuple[int, int, int]:
     s = uuid.uuid4().hex[:8]
     async with AsyncSessionLocal() as db:
-        proj = Project(name=f"alert-test-{s}")
+        proj = Subitem(name=f"alert-test-{s}")
         db.add(proj)
         await db.flush()
         device = Device(
-            project_id=proj.id,
+            subitem_id=proj.id,
             device_code=f"GW-{s}",
             protocol="http_json",
             config={},
@@ -80,7 +80,7 @@ async def test_alert_lifecycle_upsert_and_close(client: AsyncClient, admin_user:
             await db.commit()
             assert created is False
 
-        # 列表（不传 project_id -> 用 point_id 过滤）
+        # 列表（不传 subitem_id -> 用 point_id 过滤）
         headers = await login_headers(client, admin_user["username"], admin_user["password"])
         resp = await client.get(f"/api/v1/alerts?point_id={pid}", headers=headers)
         assert resp.status_code == 200, resp.text
@@ -141,13 +141,13 @@ async def test_alert_filter_by_level_and_resolved(client: AsyncClient, admin_use
 
 async def test_alerts_list_requires_filter(client: AsyncClient, admin_user: dict) -> None:
     headers = await login_headers(client, admin_user["username"], admin_user["password"])
-    # 不带 project_id / point_id，列表应能查询（admin 可见全量）
+    # 不带 subitem_id / point_id，列表应能查询（admin 可见全量）
     resp = await client.get("/api/v1/alerts", headers=headers)
     assert resp.status_code == 200
 
 
 async def test_dashboard_stats(client: AsyncClient, admin_user: dict) -> None:
-    project_id, _, pid = await _make_point_with_alert_rules()
+    subitem_id, _, pid = await _make_point_with_alert_rules()
     try:
         async with AsyncSessionLocal() as db:
             await upsert_alert(
@@ -159,7 +159,7 @@ async def test_dashboard_stats(client: AsyncClient, admin_user: dict) -> None:
             await db.commit()
 
         headers = await login_headers(client, admin_user["username"], admin_user["password"])
-        resp = await client.get(f"/api/v1/dashboard/stats?project_id={project_id}", headers=headers)
+        resp = await client.get(f"/api/v1/dashboard/stats?subitem_id={subitem_id}", headers=headers)
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data["active_alerts"] >= 1
@@ -167,7 +167,7 @@ async def test_dashboard_stats(client: AsyncClient, admin_user: dict) -> None:
         assert "by_level" in data
 
         resp = await client.get(
-            f"/api/v1/dashboard/recent-alerts?project_id={project_id}&limit=5",
+            f"/api/v1/dashboard/recent-alerts?subitem_id={subitem_id}&limit=5",
             headers=headers,
         )
         assert resp.status_code == 200

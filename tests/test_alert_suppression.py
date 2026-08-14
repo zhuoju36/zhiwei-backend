@@ -13,7 +13,7 @@ from app.database import AsyncSessionLocal
 from app.models.alert import Alert
 from app.models.device import Device
 from app.models.point import Point
-from app.models.project import Project
+from app.models.subitem import Subitem
 from app.services.alert_service import (
     TriggerEvent,
     close_open_alerts,
@@ -37,11 +37,11 @@ class _Helpers:
     async def make_point(db_cleanup: list[int]) -> int:
         s = uuid.uuid4().hex[:8]
         async with AsyncSessionLocal() as db:
-            proj = Project(name=f"supp-test-{s}")
+            proj = Subitem(name=f"supp-test-{s}")
             db.add(proj)
             await db.flush()
             device = Device(
-                project_id=proj.id,
+                subitem_id=proj.id,
                 device_code=f"GW-S-{s}",
                 protocol="http_json",
                 config={},
@@ -66,7 +66,7 @@ class _Helpers:
                 d = await db2.get(Device, p.device_id)
                 await db2.delete(p)
                 if d:
-                    proj = await db2.get(Project, d.project_id)
+                    proj = await db2.get(Subitem, d.subitem_id)
                     await db2.delete(d)
                     if proj:
                         await db2.delete(proj)

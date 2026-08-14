@@ -1,6 +1,6 @@
 # 架构设计
 
-> SHM 平台后端 v0.7.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.8.0 · 更新于 2026-08-13
 >
 > 本文聚焦后端实现架构。全局业务架构、容量规划、性能目标参见 `../架构说明书.md`。
 
@@ -12,7 +12,7 @@
 │  · 路由薄、业务参数校验、权限注入、调用 Service              │
 ├─────────────────────────────────────────────────────────────┤
 │  服务层 (app/services/)                                     │
-│  · 时序数据读写、项目/用户 CRUD、业务编排                    │
+│  · 时序数据读写、子项/用户 CRUD、业务编排                    │
 │  · DataService 持有 asyncpg Pool，绕开 ORM 走原生 SQL/COPY   │
 ├─────────────────────────────────────────────────────────────┤
 │  持久化层                                                   │
@@ -107,10 +107,10 @@
 - v0.2：设备/测点/告警/大屏路由；阈值告警评估 + Celery `alerts` 队列异步触发；WebSocket `data:alert` 实时推送
 - v0.3：modbus_tcp + mqtt 适配器；服务器端协议元数据 API + 校验；三套模拟器脚本 + 边缘网关参考运行脚本
 - v0.4：FFT 分析插件；`analysis_jobs` 表 + 迁移；MinIO 客户端；Celery `analysis` 队列异步任务；`/analysis/jobs` CRUD + NPZ 结果下载
-- v0.5：WS 项目权限校验（关闭 v0.1 TODO）；告警抑制（per-rule suppress_seconds，复用最近已关闭告警重开）；多渠道通知（Webhook + Email 全局配置，集成进 alert_tasks）
+- v0.5：WS 子项权限校验（关闭 v0.1 TODO）；告警抑制（per-rule suppress_seconds，复用最近已关闭告警重开）；多渠道通知（Webhook + Email 全局配置，集成进 alert_tasks）
 - v0.6：首次部署引导（setup 端点 + CLI + Docker entrypoint）；删除 seed.py（默认 admin/admin123456）
 - v0.7：平台元数据（`platform_settings` 单行表，admin PUT）；用户管理（6 个 admin CRUD 端点 + SELF_PROTECTED + LAST_ADMIN 守卫）
 
-中期（v0.9）：每项目通知通道配置；用户自服务（`/auth/me`、改自己密码、忘记密码）；钉钉/企微/Slack 专属 payload 包装；modbus_rtu / opcua 适配器；modbus_rtu 适配器；模态分析 / 趋势预测等其它分析插件与 MinIO 存储；3D 模型上传与转换；完整边缘网关进程；审计日志；首次登录强制改密码；zxcvbn 密码强度评分。
+中期（v0.9）：每子项通知通道配置；用户自服务（`/auth/me`、改自己密码、忘记密码）；钉钉/企微/Slack 专属 payload 包装；modbus_rtu / opcua 适配器；modbus_rtu 适配器；模态分析 / 趋势预测等其它分析插件与 MinIO 存储；3D 模型上传与转换；完整边缘网关进程；审计日志；首次登录强制改密码；zxcvbn 密码强度评分。
 
 长期（v1.0）：K8s 化、HTTPS 终止、跨区域复制。

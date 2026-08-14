@@ -1,6 +1,6 @@
 # 告警
 
-> v0.7.0 · 更新于 2026-08-13
+> v0.8.0 · 更新于 2026-08-13
 
 阈值告警的生命周期由 [Celery `alerts` 队列](architecture.md) 异步驱动：每次 `POST /data/ingest` 完成后，对涉及的测点批量评估 `alert_rules`，触发或关闭 `(point_id, level)` 唯一未恢复告警。
 
@@ -33,9 +33,9 @@
 
 ## 权限
 
-| 操作 | admin | 项目 admin | 项目 write / read | 其他 |
+| 操作 | admin | 子项 admin | 子项 write / read | 其他 |
 |------|-------|-----------|-------------------|------|
-| `GET /alerts`（列表/详情） | ✓ | ✓ | ✓（限可见项目） | ✗ |
+| `GET /alerts`（列表/详情） | ✓ | ✓ | ✓（限可见子项） | ✗ |
 | `POST /alerts/{id}/acknowledge` | ✓ | ✓ | ✗ | ✗ |
 
 ---
@@ -48,7 +48,7 @@
 
 | 参数 | 类型 | 默认 | 说明 |
 |------|------|------|------|
-| `project_id` | int | — | 按项目 |
+| `project_id` | int | — | 按子项 |
 | `point_id` | int | — | 按测点 |
 | `level` | enum | — | `info` / `warning` / `danger` |
 | `is_resolved` | bool | — | 活跃 / 已恢复 |
@@ -88,7 +88,7 @@
 
 | HTTP | code | 说明 |
 |------|------|------|
-| 403 | `FORBIDDEN` | 未被授权访问所属项目 |
+| 403 | `FORBIDDEN` | 未被授权访问所属子项 |
 | 404 | `POINT_NOT_FOUND` | `point_id` 不存在 |
 
 ---
@@ -124,7 +124,7 @@
 
 | HTTP | code | 说明 |
 |------|------|------|
-| 403 | `FORBIDDEN` | 非项目管理员 |
+| 403 | `FORBIDDEN` | 非子项管理员 |
 | 404 | `ALERT_NOT_FOUND` | 告警不存在 |
 | 409 | `ALERT_ALREADY_RESOLVED` | 告警已确认 |
 
@@ -162,7 +162,7 @@
 ## curl 示例
 
 ```bash
-# 按项目列出活跃告警
+# 按子项列出活跃告警
 curl -G http://localhost:8000/api/v1/alerts \
     -H "Authorization: Bearer $TOKEN" \
     --data-urlencode "project_id=1" \

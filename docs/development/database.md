@@ -1,6 +1,6 @@
 # 数据库与迁移
 
-> SHM 平台后端 v0.7.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.8.0 · 更新于 2026-08-13
 >
 > 数据库架构定义在 `../架构说明书.md` 第 4 节；本文描述后端实现细节。
 
@@ -10,7 +10,7 @@
 PostgreSQL 15 + TimescaleDB 2.x
   │
   ├─ 关系表（标准 PG 表，业务元数据）
-  │    users / projects / user_projects / devices / points / alerts
+  │    users / projects / user_subitems / devices / points / alerts
   │
   └─ 时序表（TimescaleDB hypertable，传感器数据）
        sensor_raw       ── 高频原始数据，保留 7 天
@@ -24,9 +24,9 @@ PostgreSQL 15 + TimescaleDB 2.x
 | 表 | 主键 | 说明 |
 |----|------|------|
 | `users` | id | 用户；唯一索引 username / email |
-| `projects` | id | 项目；FK `users.id(created_by)` |
-| `user_projects` | (user_id, project_id) | 用户-项目授权；复合主键，permission ∈ read/write/admin |
-| `devices` | id | 设备；唯一索引 device_code；FK projects.id |
+| `projects` | id | 子项；FK `users.id(created_by)` |
+| `user_subitems` | (user_id, project_id) | 用户-子项授权；复合主键，permission ∈ read/write/admin |
+| `devices` | id | 设备；唯一索引 device_code；FK subitems.id |
 | `points` | id | 测点；唯一 (device_id, point_code)；JSONB position / alert_rules |
 | `alerts` | id | 告警；FK points.id；level / is_resolved / 时间窗 |
 | `analysis_jobs` | id | 分析任务；FK points.id；plugin / params / status / result_key |

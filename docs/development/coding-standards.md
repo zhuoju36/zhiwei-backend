@@ -1,6 +1,6 @@
 # 代码规范
 
-> SHM 平台后端 v0.7.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.8.0 · 更新于 2026-08-13
 >
 > 本文补充 `../AGENTS.md` 中已给出的规则，给出更具体的实施细节与示例。AGENTS.md 是最高优先级；本文不与之冲突时可直接遵循。
 
@@ -125,7 +125,7 @@ class FooAdapter(ProtocolAdapter):
 
 ## 8. 导入排序与 Lint
 
-项目使用 ruff，配置在 `pyproject.toml`：
+子项使用 ruff，配置在 `pyproject.toml`：
 
 - `select = ["E", "F", "I", "UP", "B", "ASYNC"]`
 - `line-length = 100`

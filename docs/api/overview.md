@@ -1,6 +1,6 @@
 # API 概览
 
-> SHM 平台后端 v0.7.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.8.0 · 更新于 2026-08-13
 
 Base URL：`http://<host>/api/v1`
 
@@ -32,7 +32,7 @@ Base URL：`http://<host>/api/v1`
 |------|-----------|------|----------|
 | 400 | `VALIDATION_ERROR` | 入参校验失败 | Pydantic Field 约束不满足 |
 | 401 | `AUTH_ERROR` | 未认证 / 凭证无效 | 缺失或过期 token、密码错误 |
-| 403 | `FORBIDDEN` | 已认证但无权限 | 非 admin 调用 admin-only 接口、非授权用户访问项目 |
+| 403 | `FORBIDDEN` | 已认证但无权限 | 非 admin 调用 admin-only 接口、非授权用户访问子项 |
 | 404 | `PROJECT_NOT_FOUND` / `POINT_NOT_FOUND` / `USER_NOT_FOUND` | 资源不存在 | 路径 ID 无效 |
 | 409 | `USER_EXISTS` | 资源冲突 | 用户名已存在 |
 | 422 | `VALIDATION_ERROR` | 请求体验证失败 | 字段类型错误、必填缺失 |

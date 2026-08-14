@@ -1,27 +1,27 @@
-"""项目相关 Schema。"""
+"""子项相关 Schema。"""
 
 from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.constants import ProjectPermission
+from app.core.constants import SubitemPermission
 
 
-class ProjectCreate(BaseModel):
+class SubitemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     description: str | None = None
     location: dict[str, Any] | None = None  # {lat, lng, address}
 
 
-class ProjectUpdate(BaseModel):
+class SubitemUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     description: str | None = None
     location: dict[str, Any] | None = None
     model_file_key: str | None = None
 
 
-class ProjectOut(BaseModel):
+class SubitemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -33,6 +33,6 @@ class ProjectOut(BaseModel):
     created_at: datetime
 
 
-class ProjectAssignIn(BaseModel):
+class SubitemAssignIn(BaseModel):
     user_id: int
-    permission: ProjectPermission = ProjectPermission.READ
+    permission: SubitemPermission = SubitemPermission.READ

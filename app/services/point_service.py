@@ -43,7 +43,7 @@ class PointService:
 
     @staticmethod
     async def list_by_project(
-        db: AsyncSession, project_id: int, page: int, size: int
+        db: AsyncSession, subitem_id: int, page: int, size: int
     ) -> tuple[list[Point], int]:
         """通过 JOIN device 一次性查项目下所有测点。"""
         total = (
@@ -51,7 +51,7 @@ class PointService:
                 select(func.count())
                 .select_from(Point)
                 .join(Device, Device.id == Point.device_id)
-                .where(Device.project_id == project_id)
+                .where(Device.subitem_id == subitem_id)
             )
         ).scalar_one()
         rows = (
@@ -59,7 +59,7 @@ class PointService:
                 await db.execute(
                     select(Point)
                     .join(Device, Device.id == Point.device_id)
-                    .where(Device.project_id == project_id)
+                    .where(Device.subitem_id == subitem_id)
                     .order_by(Point.id)
                     .offset((page - 1) * size)
                     .limit(size)

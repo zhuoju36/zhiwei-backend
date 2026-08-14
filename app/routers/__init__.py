@@ -16,9 +16,9 @@ from app.routers import (
     models,
     platform,
     points,
-    projects,
     protocols,
     setup,
+    subitems,
     users,
 )
 
@@ -27,7 +27,7 @@ api_router.include_router(setup.router)
 api_router.include_router(platform.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
-api_router.include_router(projects.router)
+api_router.include_router(subitems.router)
 api_router.include_router(protocols.router)
 api_router.include_router(devices.router)
 api_router.include_router(points.router)

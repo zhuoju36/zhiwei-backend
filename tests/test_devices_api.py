@@ -5,13 +5,13 @@ import uuid
 from httpx import AsyncClient
 
 from app.database import AsyncSessionLocal
-from app.models.project import Project
+from app.models.subitem import Subitem
 from tests.conftest import login_headers
 
 
 async def _create_project(db_name: str | None = None) -> int:
     async with AsyncSessionLocal() as db:
-        proj = Project(name=f"device-test-{uuid.uuid4().hex[:8]}")
+        proj = Subitem(name=f"device-test-{uuid.uuid4().hex[:8]}")
         db.add(proj)
         await db.commit()
         await db.refresh(proj)
@@ -20,14 +20,14 @@ async def _create_project(db_name: str | None = None) -> int:
 
 async def test_device_crud_flow(client: AsyncClient, admin_user: dict) -> None:
     headers = await login_headers(client, admin_user["username"], admin_user["password"])
-    project_id = await _create_project()
+    subitem_id = await _create_project()
     code = f"GW-{uuid.uuid4().hex[:8]}"
 
     # 创建
     resp = await client.post(
         "/api/v1/devices",
         json={
-            "project_id": project_id,
+            "subitem_id": subitem_id,
             "device_code": code,
             "device_name": "测试网关",
             "protocol": "http_json",
@@ -40,7 +40,7 @@ async def test_device_crud_flow(client: AsyncClient, admin_user: dict) -> None:
     device_id = device["id"]
 
     # 列表
-    resp = await client.get(f"/api/v1/devices?project_id={project_id}", headers=headers)
+    resp = await client.get(f"/api/v1/devices?subitem_id={subitem_id}", headers=headers)
     assert resp.status_code == 200
     page = resp.json()["data"]
     assert any(d["id"] == device_id for d in page["items"])
@@ -69,10 +69,10 @@ async def test_device_crud_flow(client: AsyncClient, admin_user: dict) -> None:
 
 async def test_device_duplicate_code_rejected(client: AsyncClient, admin_user: dict) -> None:
     headers = await login_headers(client, admin_user["username"], admin_user["password"])
-    project_id = await _create_project()
+    subitem_id = await _create_project()
     code = f"GW-{uuid.uuid4().hex[:8]}"
     body = {
-        "project_id": project_id,
+        "subitem_id": subitem_id,
         "device_code": code,
         "protocol": "http_json",
         "config": {},
@@ -88,6 +88,6 @@ async def test_non_admin_cannot_create(client: AsyncClient) -> None:
     """无 admin token 直接被 401 拦截；普通用户场景需要单独绑定 project 写权限（v0.3+）。"""
     resp = await client.post(
         "/api/v1/devices",
-        json={"project_id": 1, "device_code": "X", "protocol": "http_json", "config": {}},
+        json={"subitem_id": 1, "device_code": "X", "protocol": "http_json", "config": {}},
     )
     assert resp.status_code == 401

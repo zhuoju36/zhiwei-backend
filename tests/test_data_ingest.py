@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.database import AsyncSessionLocal
-from app.models import Device, Point, Project
+from app.models import Device, Point, Subitem
 from tests.conftest import login_headers
 
 API_KEY_HEADERS = {"X-API-Key": settings.edge_api_key}
@@ -22,11 +22,11 @@ async def point_fixture() -> AsyncGenerator[dict, None]:
     """创建唯一的项目/设备/测点，用后删除。"""
     suffix = uuid.uuid4().hex[:8]
     async with AsyncSessionLocal() as db:
-        project = Project(name=f"ingest-test-{suffix}")
+        project = Subitem(name=f"ingest-test-{suffix}")
         db.add(project)
         await db.flush()
         device = Device(
-            project_id=project.id,
+            subitem_id=project.id,
             device_code=f"GW-{suffix}",
             device_name="测试网关",
             protocol="http_json",
@@ -38,7 +38,7 @@ async def point_fixture() -> AsyncGenerator[dict, None]:
         db.add(point)
         await db.commit()
         ids = {
-            "project_id": project.id,
+            "subitem_id": project.id,
             "device_id": device.id,
             "point_id": point.id,
             "device_code": device.device_code,
@@ -46,7 +46,7 @@ async def point_fixture() -> AsyncGenerator[dict, None]:
         }
     yield ids
     async with AsyncSessionLocal() as db:
-        project = await db.get(Project, ids["project_id"])
+        project = await db.get(Subitem, ids["subitem_id"])
         device = await db.get(Device, ids["device_id"])
         point = (
             await db.execute(select(Point).where(Point.id == ids["point_id"]))

@@ -6,18 +6,18 @@ from httpx import AsyncClient
 
 from app.database import AsyncSessionLocal
 from app.models.device import Device
-from app.models.project import Project
+from app.models.subitem import Subitem
 from tests.conftest import login_headers
 
 
 async def _make_device(suffix: str | None = None) -> tuple[int, str, str]:
     s = suffix or uuid.uuid4().hex[:8]
     async with AsyncSessionLocal() as db:
-        proj = Project(name=f"point-test-{s}")
+        proj = Subitem(name=f"point-test-{s}")
         db.add(proj)
         await db.flush()
         device = Device(
-            project_id=proj.id,
+            subitem_id=proj.id,
             device_code=f"GW-{s}",
             protocol="http_json",
             config={},
@@ -30,7 +30,7 @@ async def _make_device(suffix: str | None = None) -> tuple[int, str, str]:
 
 async def test_point_crud_with_alert_rules(client: AsyncClient, admin_user: dict) -> None:
     headers = await login_headers(client, admin_user["username"], admin_user["password"])
-    project_id, device_id, point_code = await _make_device()
+    subitem_id, device_id, point_code = await _make_device()
 
     # 创建（带 alert_rules）
     resp = await client.post(
@@ -59,7 +59,7 @@ async def test_point_crud_with_alert_rules(client: AsyncClient, admin_user: dict
     assert resp.json()["data"]["total"] == 1
 
     # 按 project 列表
-    resp = await client.get(f"/api/v1/points?project_id={project_id}", headers=headers)
+    resp = await client.get(f"/api/v1/points?subitem_id={subitem_id}", headers=headers)
     assert resp.status_code == 200
     assert resp.json()["data"]["total"] == 1
 

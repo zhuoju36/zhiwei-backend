@@ -120,7 +120,7 @@ def test_ws_unauthorized_project_sends_error() -> None:
     """合法用户 + 无项目权限：收到 cmd:error，连接保持空闲可继续收发。
 
     用直接调用 ws_data 内部协程的方式避免 TestClient 的循环生命周期
-    干扰；patch check_project_access 抛 BizException。
+    干扰；patch check_subitem_access 抛 BizException。
     """
     import asyncio
 
@@ -135,7 +135,7 @@ def test_ws_unauthorized_project_sends_error() -> None:
             self.accepted = False
             self.closed_with: tuple[int, str] | None = None
             self.sent: list[str] = []
-            self._recv_queue: list[bytes] = [b'{"type":"cmd:subscribe","project_id":999}']
+            self._recv_queue: list[bytes] = [b'{"type":"cmd:subscribe","subitem_id":999}']
             self._closed = False
 
         async def accept(self):
@@ -154,7 +154,7 @@ def test_ws_unauthorized_project_sends_error() -> None:
             raise BizException(code="WS_CLOSED", message="test end")
 
     fake = FakeWS()
-    with patch("app.ws.endpoints.check_project_access", new_callable=AsyncMock) as mock_check:
+    with patch("app.ws.endpoints.check_subitem_access", new_callable=AsyncMock) as mock_check:
         mock_check.side_effect = BizException(code="FORBIDDEN", message="无权", status_code=403)
         with patch("app.ws.endpoints.AsyncSessionLocal") as mock_session:
             mock_session.return_value.__aenter__ = AsyncMock(return_value=_FakeSession())
@@ -177,7 +177,7 @@ def test_ws_authorized_user_subs() -> None:
         def __init__(self):
             self.accepted = False
             self.sent: list[str] = []
-            self._recv_queue: list[bytes] = [b'{"type":"cmd:subscribe","project_id":1}']
+            self._recv_queue: list[bytes] = [b'{"type":"cmd:subscribe","subitem_id":1}']
 
         async def accept(self):
             self.accepted = True
@@ -197,11 +197,11 @@ def test_ws_authorized_user_subs() -> None:
             raise WebSocketDisconnect()
 
     fake = FakeWS()
-    # admin 全局通过 check_project_access（admin 短路），所以不需要 mock
+    # admin 全局通过 check_subitem_access（admin 短路），所以不需要 mock
     with patch("app.ws.endpoints.AsyncSessionLocal") as mock_session:
         mock_session.return_value.__aenter__ = AsyncMock(return_value=_FakeSession())
         mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
         asyncio.run(ws_data(fake, token=token))
 
     assert fake.accepted is True
-    assert any('"cmd:subscribed"' in t and '"project_id": 1' in t for t in fake.sent)
+    assert any('"cmd:subscribed"' in t and '"subitem_id": 1' in t for t in fake.sent)

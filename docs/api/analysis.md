@@ -1,6 +1,6 @@
 # 分析
 
-> v0.7.0 · 更新于 2026-08-13
+> v0.8.0 · 更新于 2026-08-13
 
 异步分析任务链路：用户提交任务 → Celery `analysis` 队列消费 → 插件计算 → 结果存 MinIO + 摘要回写数据库。v0.4 内置唯一插件为 **FFT**（频谱分析），后续按相同契约扩展。
 
@@ -33,10 +33,10 @@
 
 ## 权限
 
-| 操作 | admin | 项目 write | 项目 read | 其他 |
+| 操作 | admin | 子项 write | 子项 read | 其他 |
 |------|-------|-----------|-----------|------|
 | `POST /analysis/jobs`（提交） | ✓ | ✓ | ✗ | ✗ |
-| `GET /analysis/jobs`（列表） | ✓ | ✓（限可见项目） | ✓ | ✗ |
+| `GET /analysis/jobs`（列表） | ✓ | ✓（限可见子项） | ✓ | ✗ |
 | `GET /analysis/jobs/{id}`（详情） | ✓ | ✓ | ✓ | ✗ |
 | `GET /analysis/jobs/{id}/result`（下载 NPZ） | ✓ | ✓ | ✓ | ✗ |
 
@@ -77,7 +77,7 @@
 
 | HTTP | code | 说明 |
 |------|------|------|
-| 403 | `FORBIDDEN` | 无项目写权限 |
+| 403 | `FORBIDDEN` | 无子项写权限 |
 | 404 | `POINT_NOT_FOUND` | 测点不存在 |
 | 422 | `PLUGIN_NOT_REGISTERED` | plugin 不在 `AnalyzerRegistry` 内 |
 

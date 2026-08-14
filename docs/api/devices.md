@@ -1,8 +1,8 @@
 # 设备
 
-> v0.7.0 · 更新于 2026-08-13
+> v0.8.0 · 更新于 2026-08-13
 
-管理项目内的硬件网关 / 采集设备。每个设备绑定一种协议，通过 `devices.protocol` 字段匹配 `app/plugins/protocols/` 中注册的 `ProtocolAdapter`。
+管理子项内的硬件网关 / 采集设备。每个设备绑定一种协议，通过 `devices.protocol` 字段匹配 `app/plugins/protocols/` 中注册的 `ProtocolAdapter`。
 
 ## 数据模型
 
@@ -20,11 +20,11 @@
 }
 ```
 
-`device_code` 全局唯一（不限于项目）；`config` 是协议相关的 JSONB，由前端按所选协议的 schema 提供。
+`device_code` 全局唯一（不限于子项）；`config` 是协议相关的 JSONB，由前端按所选协议的 schema 提供。
 
 ## 权限
 
-| 操作 | admin | 项目 admin | 项目 write | 项目 read | 其他 |
+| 操作 | admin | 子项 admin | 子项 write | 子项 read | 其他 |
 |------|-------|-----------|-----------|-----------|------|
 | `GET /devices`（列表） | ✓ | ✓ | ✓ | ✓ | ✗ |
 | `GET /devices/{id}` | ✓ | ✓ | ✓ | ✓ | ✗ |
@@ -36,13 +36,13 @@
 
 ## GET /api/v1/devices
 
-按项目分页列出设备。
+按子项分页列出设备。
 
 ### Query
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
-| `project_id` | 是 | 项目 ID |
+| `project_id` | 是 | 子项 ID |
 | `page` / `size` | 否 | 分页参数 |
 
 ### 响应 200
@@ -63,7 +63,7 @@
 
 | HTTP | code | 说明 |
 |------|------|------|
-| 403 | `FORBIDDEN` | 未被授权访问该项目 |
+| 403 | `FORBIDDEN` | 未被授权访问该子项 |
 
 ---
 
@@ -84,7 +84,7 @@
 ```
 
 字段约束：
-- `project_id`：必填且项目必须存在
+- `project_id`：必填且子项必须存在
 - `device_code`：1-64 字符，全局唯一
 - `protocol`：必须已注册到 `AdapterRegistry.names()`（参见 `app/plugins/protocols/`）；v0.2 注册的有 `http_json`
 - `config`：协议配置 JSONB，schema 由前端按所选协议决定
@@ -97,8 +97,8 @@
 
 | HTTP | code | 说明 |
 |------|------|------|
-| 403 | `FORBIDDEN` | 无项目写权限 |
-| 404 | `PROJECT_NOT_FOUND` | 项目不存在 |
+| 403 | `FORBIDDEN` | 无子项写权限 |
+| 404 | `PROJECT_NOT_FOUND` | 子项不存在 |
 | 409 | `DEVICE_CODE_EXISTS` | device_code 已被占用 |
 
 ---
@@ -115,7 +115,7 @@
 
 | HTTP | code | 说明 |
 |------|------|------|
-| 403 | `FORBIDDEN` | 未被授权访问所属项目 |
+| 403 | `FORBIDDEN` | 未被授权访问所属子项 |
 | 404 | `DEVICE_NOT_FOUND` | 设备不存在 |
 
 ---

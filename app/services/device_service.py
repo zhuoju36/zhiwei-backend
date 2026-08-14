@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BizException
 from app.models.device import Device
-from app.models.project import Project
+from app.models.subitem import Subitem
 from app.plugins.protocols.registry import AdapterRegistry
 from app.schemas.device import DeviceCreate, DeviceUpdate
 
@@ -19,19 +19,19 @@ class DeviceService:
         return device
 
     @staticmethod
-    async def list_by_project(
-        db: AsyncSession, project_id: int, page: int, size: int
+    async def list_by_subitem(
+        db: AsyncSession, subitem_id: int, page: int, size: int
     ) -> tuple[list[Device], int]:
         total = (
             await db.execute(
-                select(func.count()).select_from(Device).where(Device.project_id == project_id)
+                select(func.count()).select_from(Device).where(Device.subitem_id == subitem_id)
             )
         ).scalar_one()
         rows = (
             (
                 await db.execute(
                     select(Device)
-                    .where(Device.project_id == project_id)
+                    .where(Device.subitem_id == subitem_id)
                     .order_by(Device.id)
                     .offset((page - 1) * size)
                     .limit(size)
@@ -44,8 +44,8 @@ class DeviceService:
 
     @staticmethod
     async def create(db: AsyncSession, payload: DeviceCreate) -> Device:
-        if await db.get(Project, payload.project_id) is None:
-            raise BizException(code="PROJECT_NOT_FOUND", message="项目不存在", status_code=404)
+        if await db.get(Subitem, payload.subitem_id) is None:
+            raise BizException(code="SUBITEM_NOT_FOUND", message="子项不存在", status_code=404)
         if payload.protocol not in AdapterRegistry.names():
             raise BizException(
                 code="PROTOCOL_NOT_REGISTERED",
@@ -59,7 +59,7 @@ class DeviceService:
         if existing is not None:
             raise BizException(code="DEVICE_CODE_EXISTS", message="设备编码已存在", status_code=409)
         device = Device(
-            project_id=payload.project_id,
+            subitem_id=payload.subitem_id,
             device_code=payload.device_code,
             device_name=payload.device_name,
             protocol=payload.protocol,

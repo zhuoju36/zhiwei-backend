@@ -1,4 +1,8 @@
-"""项目（建筑）与用户-项目授权关联模型。"""
+"""子项（监测范围）与用户-子项授权关联模型。
+
+v0.8a 重命名：原 `projects` / `user_projects` 改名为 `subitems` /
+`user_subitems`，列名 `project_id` 改 `subitem_id`。Schema 物理结构不变。
+"""
 
 from __future__ import annotations
 
@@ -16,8 +20,8 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
-class Project(Base):
-    __tablename__ = "projects"
+class Subitem(Base):
+    __tablename__ = "subitems"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -27,24 +31,24 @@ class Project(Base):
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    user_links: Mapped[list[UserProject]] = relationship(
-        back_populates="project", cascade="all, delete-orphan"
+    user_links: Mapped[list[UserSubitem]] = relationship(
+        back_populates="subitem", cascade="all, delete-orphan"
     )
-    devices: Mapped[list[Device]] = relationship(back_populates="project")
+    devices: Mapped[list[Device]] = relationship(back_populates="subitem")
 
 
-class UserProject(Base):
-    """用户-项目多对多关联，控制数据权限。"""
+class UserSubitem(Base):
+    """用户-子项多对多关联，控制数据权限。"""
 
-    __tablename__ = "user_projects"
+    __tablename__ = "user_subitems"
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    project_id: Mapped[int] = mapped_column(
-        ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    subitem_id: Mapped[int] = mapped_column(
+        ForeignKey("subitems.id", ondelete="CASCADE"), primary_key=True
     )
     permission: Mapped[str] = mapped_column(String(16), default="read", server_default="read")
 
-    user: Mapped[User] = relationship(back_populates="project_links")
-    project: Mapped[Project] = relationship(back_populates="user_links")
+    user: Mapped[User] = relationship(back_populates="subitem_links")
+    subitem: Mapped[Subitem] = relationship(back_populates="user_links")

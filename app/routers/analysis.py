@@ -8,8 +8,8 @@ from app.core.middleware import create_router
 from app.dependencies import (
     CurrentUser,
     DbSession,
-    check_project_access,
-    check_project_write_access,
+    check_subitem_access,
+    check_subitem_write_access,
 )
 from app.models.device import Device
 from app.models.point import Point
@@ -33,8 +33,8 @@ async def submit_job(
     db: DbSession,
     current_user: CurrentUser,
 ) -> AnalysisSubmitOut:
-    project_id = await check_point_project(payload.point_id)
-    await check_project_write_access(db, current_user, project_id)
+    subitem_id = await check_point_project(payload.point_id)
+    await check_subitem_write_access(db, current_user, subitem_id)
     analysis_service.validate_plugin(payload.plugin)
     job = await analysis_service.create_job(
         db, payload.point_id, payload.plugin, payload.params, current_user.id
@@ -62,7 +62,7 @@ async def list_jobs(
     if point_id is not None:
         await check_point_project(point_id)
         project_id_for_point = await check_point_project(point_id)
-        await check_project_access(db, current_user, project_id_for_point)
+        await check_subitem_access(db, current_user, project_id_for_point)
 
     rows, total = await analysis_service.list_jobs(
         db, point_id=point_id, plugin=plugin, status=status, page=page, size=size
@@ -80,7 +80,7 @@ async def get_job(job_id: int, db: DbSession, current_user: CurrentUser) -> Anal
     job = await analysis_service.get_job(db, job_id)
     point = await db.get(Point, job.point_id)
     device = await db.get(Device, point.device_id)
-    await check_project_access(db, current_user, device.project_id)
+    await check_subitem_access(db, current_user, device.subitem_id)
     return _job_to_out(job)
 
 
@@ -89,7 +89,7 @@ async def get_job_result(job_id: int, db: DbSession, current_user: CurrentUser) 
     job = await analysis_service.get_job(db, job_id)
     point = await db.get(Point, job.point_id)
     device = await db.get(Device, point.device_id)
-    await check_project_access(db, current_user, device.project_id)
+    await check_subitem_access(db, current_user, device.subitem_id)
     if job.status != "success" or not job.result_key:
         from app.core.exceptions import BizException
 

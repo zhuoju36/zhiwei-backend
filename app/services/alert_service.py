@@ -182,19 +182,19 @@ async def list_alerts(db: AsyncSession, query: AlertListQuery) -> tuple[list[Ale
     stmt = select(Alert)
     count_stmt = select(func.count()).select_from(Alert)
 
-    if query.project_id is not None:
+    if query.subitem_id is not None:
         stmt = (
             select(Alert)
             .join(Point, Point.id == Alert.point_id)
             .join(Device, Point.device_id == Device.id)
-            .where(Device.project_id == query.project_id)
+            .where(Device.subitem_id == query.subitem_id)
         )
         count_stmt = (
             select(func.count())
             .select_from(Alert)
             .join(Point, Point.id == Alert.point_id)
             .join(Device, Point.device_id == Device.id)
-            .where(Device.project_id == query.project_id)
+            .where(Device.subitem_id == query.subitem_id)
         )
 
     if query.point_id is not None:

@@ -58,11 +58,11 @@ async def close() -> None:
 async def _resolve_code_map(
     conn: asyncpg.Connection, readings: list[ReadingIn]
 ) -> dict[tuple[str, str], tuple[int, int, int]]:
-    """批量将 (device_code, point_code) 映射为 (device_id, point_id, project_id)。"""
+    """批量将 (device_code, point_code) 映射为 (device_id, point_id, subitem_id)。"""
     device_codes = list({r.device_code for r in readings})
     rows = await conn.fetch(
         """
-        SELECT d.id AS device_id, d.device_code, d.project_id, p.id AS point_id, p.point_code
+        SELECT d.id AS device_id, d.device_code, d.subitem_id, p.id AS point_id, p.point_code
         FROM devices d
         JOIN points p ON p.device_id = d.id
         WHERE d.device_code = ANY($1)
@@ -73,7 +73,7 @@ async def _resolve_code_map(
         (row["device_code"], row["point_code"]): (
             row["device_id"],
             row["point_id"],
-            row["project_id"],
+            row["subitem_id"],
         )
         for row in rows
     }
@@ -96,18 +96,18 @@ async def batch_ingest(readings: list[ReadingIn]) -> int:
         records = []
         accepted: list[
             tuple[ReadingIn, int, int, int]
-        ] = []  # (reading, device_id, point_id, project_id)
+        ] = []  # (reading, device_id, point_id, subitem_id)
         skipped = 0
         for r in readings:
             ids = code_map.get((r.device_code, r.point_code))
             if ids is None:
                 skipped += 1
                 continue
-            device_id, point_id, project_id = ids
+            device_id, point_id, subitem_id = ids
             records.append(
                 (r.timestamp, device_id, point_id, r.value, r.quality.value, json.dumps(r.extra))
             )
-            accepted.append((r, device_id, point_id, project_id))
+            accepted.append((r, device_id, point_id, subitem_id))
 
         if skipped:
             logger.warning("批量接入丢弃 %d 条未知编码读数", skipped)
@@ -133,12 +133,12 @@ async def _dispatch_alert_check(accepted: list[tuple[ReadingIn, int, int, int]])
         {
             "device_id": device_id,
             "point_id": point_id,
-            "project_id": project_id,
+            "subitem_id": subitem_id,
             "value": r.value,
             "timestamp": r.timestamp.isoformat(),
             "quality": r.quality.value,
         }
-        for r, device_id, point_id, project_id in accepted
+        for r, device_id, point_id, subitem_id in accepted
     ]
     try:
         # 延迟导入避免循环依赖（alert_tasks 间接依赖 data_service.get_redis）
@@ -160,7 +160,7 @@ async def _publish_realtime(
                 ids = code_map.get((r.device_code, r.point_code))
                 if ids is None:
                     continue
-                _, point_id, project_id = ids
+                _, point_id, subitem_id = ids
                 payload = {
                     "type": "data:realtime",
                     "payload": {
@@ -172,7 +172,7 @@ async def _publish_realtime(
                     },
                 }
                 pipe.set(f"latest:{point_id}", json.dumps(payload["payload"]))
-                pipe.publish(f"project:{project_id}", json.dumps(payload))
+                pipe.publish(f"subitem:{subitem_id}", json.dumps(payload))
             await pipe.execute()
     except Exception:
         # 推送失败不影响写入主流程
@@ -238,14 +238,14 @@ async def check_point_project(point_id: int) -> int:
     """返回测点所属项目 ID，用于路由层权限校验。"""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        project_id = await conn.fetchval(
+        subitem_id = await conn.fetchval(
             """
-            SELECT d.project_id
+            SELECT d.subitem_id
             FROM points p JOIN devices d ON d.id = p.device_id
             WHERE p.id = $1
             """,
             point_id,
         )
-    if project_id is None:
+    if subitem_id is None:
         raise BizException(code="POINT_NOT_FOUND", message="测点不存在", status_code=404)
-    return project_id
+    return subitem_id

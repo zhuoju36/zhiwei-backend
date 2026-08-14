@@ -22,7 +22,7 @@ async def _wipe_users() -> None:
         await db.execute(
             text(
                 "TRUNCATE TABLE alerts, analysis_jobs, points, devices, "
-                "user_projects, projects, users RESTART IDENTITY CASCADE"
+                "user_subitems, subitems, users RESTART IDENTITY CASCADE"
             )
         )
         await db.commit()

@@ -9,7 +9,7 @@ from app.core.constants import DeviceStatus
 
 
 class DeviceCreate(BaseModel):
-    project_id: int
+    subitem_id: int
     device_code: str = Field(min_length=1, max_length=64)
     device_name: str | None = Field(default=None, max_length=128)
     protocol: str = Field(min_length=1, max_length=32)
@@ -28,7 +28,7 @@ class DeviceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    project_id: int
+    subitem_id: int
     device_code: str
     device_name: str | None
     protocol: str

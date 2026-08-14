@@ -1,6 +1,6 @@
 # 文档目录
 
-> SHM 平台后端 v0.7.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.8.0 · 更新于 2026-08-13
 
 ## 开发者文档
 
@@ -21,7 +21,7 @@
 |------|------|
 | [api/overview.md](api/overview.md) | 统一响应格式、错误码、鉴权机制、分页约定 |
 | [api/auth.md](api/auth.md) | 登录、刷新令牌 |
-| [api/projects.md](api/projects.md) | 项目 CRUD 与用户授权 |
+| [api/subitems.md](api/projects.md) | 子项 CRUD 与用户授权 |
 | [api/devices.md](api/devices.md) | 设备 CRUD |
 | [api/points.md](api/points.md) | 测点 CRUD、alert_rules 字段语义 |
 | [api/protocols.md](api/protocols.md) | 协议元数据 + 各协议 config schema |

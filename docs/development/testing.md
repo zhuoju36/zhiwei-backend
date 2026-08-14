@@ -1,6 +1,6 @@
 # 测试
 
-> SHM 平台后端 v0.7.0 · 更新于 2026-08-13
+> SHM 平台后端 v0.8.0 · 更新于 2026-08-13
 
 ## 1. 测试金字塔
 
@@ -77,7 +77,7 @@ async def login_headers(client, username, password) -> dict[str, str]:
 集成测试**直接连** `docker compose` 拉起的 `shm_db`（同一份开发库）。优点：与迁移脚本同源；缺点：测试残留数据。
 
 清理策略：
-- 用户/项目/设备/测点：fixture yield 后通过 `db.delete` 清理
+- 用户/子项/设备/测点：fixture yield 后通过 `db.delete` 清理
 - 时序数据：用唯一时间窗口（`now - timedelta`）避免 PK 冲突，长期保留不影响测试
 
 生产化建议（v0.5+）：

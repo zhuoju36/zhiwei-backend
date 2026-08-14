@@ -13,14 +13,14 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.point import Point
-    from app.models.project import Project
+    from app.models.subitem import Subitem
 
 
 class Device(Base):
     __tablename__ = "devices"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    subitem_id: Mapped[int] = mapped_column(ForeignKey("subitems.id"), nullable=False)
     device_code: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False
     )  # 设备唯一编码
@@ -31,5 +31,5 @@ class Device(Base):
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    project: Mapped[Project] = relationship(back_populates="devices")
+    subitem: Mapped[Subitem] = relationship(back_populates="devices")
     points: Mapped[list[Point]] = relationship(back_populates="device")

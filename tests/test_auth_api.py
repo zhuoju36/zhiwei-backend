@@ -34,7 +34,7 @@ async def test_login_wrong_password(client: AsyncClient, admin_user: dict) -> No
 
 
 async def test_access_without_token_rejected(client: AsyncClient) -> None:
-    resp = await client.get("/api/v1/projects")
+    resp = await client.get("/api/v1/subitems")
     assert resp.status_code == 401
 
 

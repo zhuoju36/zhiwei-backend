@@ -9,8 +9,8 @@ from app.core.middleware import create_router
 from app.dependencies import (
     CurrentUser,
     DbSession,
-    check_project_access,
-    check_project_admin,
+    check_subitem_access,
+    check_subitem_admin,
 )
 from app.models.device import Device
 from app.models.point import Point
@@ -30,7 +30,7 @@ router = create_router(prefix="/alerts", tags=["告警"])
 async def list_alerts_api(
     db: DbSession,
     current_user: CurrentUser,
-    project_id: int | None = Query(None, description="按项目筛选"),
+    subitem_id: int | None = Query(None, description="按项目筛选"),
     point_id: int | None = Query(None, description="按测点筛选"),
     level: AlertLevel | None = Query(None),
     is_resolved: bool | None = Query(None),
@@ -39,9 +39,9 @@ async def list_alerts_api(
     page: int = Query(1, ge=1),
     size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
 ) -> PageSchema[dict]:
-    # 权限：project_id 必须可见；point_id 必须属于可见项目
-    if project_id is not None:
-        await check_project_access(db, current_user, project_id)
+    # 权限：subitem_id 必须可见；point_id 必须属于可见项目
+    if subitem_id is not None:
+        await check_subitem_access(db, current_user, subitem_id)
     elif point_id is not None:
         point = await db.get(Point, point_id)
         if point is None:
@@ -49,14 +49,14 @@ async def list_alerts_api(
 
             raise BizException(code="POINT_NOT_FOUND", message="测点不存在", status_code=404)
         device = await db.get(Device, point.device_id)
-        await check_project_access(db, current_user, device.project_id)
+        await check_subitem_access(db, current_user, device.subitem_id)
 
     from app.schemas.alert import AlertListQuery
 
     rows, total = await list_alerts(
         db,
         AlertListQuery(
-            project_id=project_id,
+            subitem_id=subitem_id,
             point_id=point_id,
             level=level,
             is_resolved=is_resolved,
@@ -79,7 +79,7 @@ async def get_alert_api(alert_id: int, db: DbSession, current_user: CurrentUser)
     alert = await get_alert(db, alert_id)
     point = await db.get(Point, alert.point_id)
     device = await db.get(Device, point.device_id)
-    await check_project_access(db, current_user, device.project_id)
+    await check_subitem_access(db, current_user, device.subitem_id)
     return to_out_dict(alert)
 
 
@@ -88,6 +88,6 @@ async def acknowledge_alert_api(alert_id: int, db: DbSession, current_user: Curr
     alert = await get_alert(db, alert_id)
     point = await db.get(Point, alert.point_id)
     device = await db.get(Device, point.device_id)
-    await check_project_admin(db, current_user, device.project_id)
+    await check_subitem_admin(db, current_user, device.subitem_id)
     updated = await acknowledge_alert(db, alert_id, current_user.id)
     return to_out_dict(updated)
