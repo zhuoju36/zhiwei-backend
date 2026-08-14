@@ -10,7 +10,7 @@
     {
       "host": "127.0.0.1", "port": 5020,
       "registers": [{"address": 0, "count": 2, "data_type": "float32",
-                     "point_code": "ACC-X", "scale": 1.0, "unit": "m/s2"}]
+                     "channel_code": "ACC-X", "scale": 1.0, "unit": "m/s2"}]
     }
 """
 
@@ -37,11 +37,25 @@ logger = logging.getLogger("modbus_simulator")
 
 # 默认虚拟寄存器：地址 0/2/4 起各放 2 个寄存器（float32 编码）
 DEFAULT_REGISTERS = [
-    {"address": 0, "point_code": "ACC-X", "wave": "sine", "amp": 1.0, "bias": 0.0, "freq_hz": 0.5},
-    {"address": 2, "point_code": "ACC-Y", "wave": "sine", "amp": 0.5, "bias": 0.0, "freq_hz": 0.7},
+    {
+        "address": 0,
+        "channel_code": "ACC-X",
+        "wave": "sine",
+        "amp": 1.0,
+        "bias": 0.0,
+        "freq_hz": 0.5,
+    },
+    {
+        "address": 2,
+        "channel_code": "ACC-Y",
+        "wave": "sine",
+        "amp": 0.5,
+        "bias": 0.0,
+        "freq_hz": 0.7,
+    },
     {
         "address": 4,
-        "point_code": "TEMP",
+        "channel_code": "TEMP",
         "wave": "random",
         "amp": 5.0,
         "bias": 25.0,

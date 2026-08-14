@@ -4,7 +4,7 @@
 
 用法：
     python -m scripts.simulate_data \
-        --device-code GW-001 \
+        --subitem-id 1 --device-code GW-001 \
         --api-key edge-secret-key --base-url http://localhost:8000 \
         --rate-hz 1 --duration 30 --threshold-trigger 15
 """
@@ -35,13 +35,14 @@ def make_value(mode: str, t: float, threshold_trigger: float, baseline: float, a
     return baseline
 
 
-async def fetch_points(client: httpx.AsyncClient, base_url: str, device_code: str) -> list[dict]:
-    """通过 device_code 查到 device_id 与其下属 points（用 list API）。"""
-    # 列出设备
-    resp = await client.get(
-        "/api/v1/devices",
-        params={"project_id": 1},  # 简化为演示项目；生产按 device_code 搜索
-    )
+async def fetch_channels(
+    client: httpx.AsyncClient, base_url: str, subitem_id: int, device_code: str
+) -> list[dict]:
+    """按子项 + 设备编码遍历 device → point → sensor → channel，返回通道列表。
+
+    v0.8b 起 ingest 按 (device_code, channel_code) 寻址，演示脚本需对齐七层拓扑。
+    """
+    resp = await client.get("/api/v1/devices", params={"subitem_id": subitem_id, "size": 200})
     if resp.status_code != 200:
         logger.error("无法列出设备: %s", resp.text[:200])
         return []
@@ -50,16 +51,29 @@ async def fetch_points(client: httpx.AsyncClient, base_url: str, device_code: st
         logger.error("找不到 device_code=%s 的设备", device_code)
         return []
     device = devices[0]
-    # 列出测点
-    resp = await client.get("/api/v1/points", params={"device_id": device["id"]})
+    resp = await client.get("/api/v1/points", params={"device_id": device["id"], "size": 200})
     if resp.status_code != 200:
+        logger.error("无法列出测点: %s", resp.text[:200])
         return []
-    return resp.json()["data"]["items"]
+    channels: list[dict] = []
+    for point in resp.json()["data"]["items"]:
+        resp = await client.get("/api/v1/sensors", params={"point_id": point["id"], "size": 200})
+        if resp.status_code != 200:
+            continue
+        for sensor in resp.json()["data"]["items"]:
+            resp = await client.get(
+                "/api/v1/channels", params={"sensor_id": sensor["id"], "size": 200}
+            )
+            if resp.status_code != 200:
+                continue
+            channels.extend(resp.json()["data"]["items"])
+    return channels
 
 
 async def run(
     base_url: str,
     api_key: str,
+    subitem_id: int,
     device_code: str,
     rate_hz: float,
     duration: float,
@@ -68,10 +82,10 @@ async def run(
 ) -> None:
     headers = {"X-API-Key": api_key, "Content-Type": "application/json"}
     async with httpx.AsyncClient(base_url=base_url, timeout=10) as client:
-        points = await fetch_points(client, base_url, device_code)
-        if not points:
+        channels = await fetch_channels(client, base_url, subitem_id, device_code)
+        if not channels:
             return
-        logger.info("找到 %d 个测点: %s", len(points), [p["point_code"] for p in points])
+        logger.info("找到 %d 个通道: %s", len(channels), [c["channel_code"] for c in channels])
         start = asyncio.get_event_loop().time()
         i = 0
         while True:
@@ -82,12 +96,12 @@ async def run(
             readings = [
                 {
                     "device_code": device_code,
-                    "point_code": p["point_code"],
+                    "channel_code": c["channel_code"],
                     "timestamp": ts.isoformat(),
                     "value": make_value(mode, t, threshold_trigger, baseline=0.1, amp=0.5),
-                    "unit": p.get("unit") or "m/s2",
+                    "unit": c.get("unit") or "m/s2",
                 }
-                for p in points
+                for c in channels
             ]
             try:
                 resp = await client.post(
@@ -107,6 +121,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description="通用时序数据模拟器")
     p.add_argument("--base-url", default="http://localhost:8000")
     p.add_argument("--api-key", default="edge-secret-key")
+    p.add_argument("--subitem-id", type=int, required=True, help="子项 ID（设备所属）")
     p.add_argument("--device-code", required=True)
     p.add_argument("--rate-hz", type=float, default=1.0)
     p.add_argument("--duration", type=float, default=0.0)
@@ -120,6 +135,7 @@ def main() -> None:
             run(
                 args.base_url,
                 args.api_key,
+                args.subitem_id,
                 args.device_code,
                 args.rate_hz,
                 args.duration,

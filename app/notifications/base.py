@@ -9,7 +9,7 @@ class AlertPayload(TypedDict, total=False):
     """告警通知的统一负载。"""
 
     alert_id: int
-    point_id: int
+    channel_id: int
     subitem_id: int
     level: str
     value: float
@@ -17,7 +17,7 @@ class AlertPayload(TypedDict, total=False):
     message: str | None
     started_at: str  # ISO 8601
     device_code: str
-    point_code: str
+    channel_code: str
 
 
 class NotificationChannel(Protocol):

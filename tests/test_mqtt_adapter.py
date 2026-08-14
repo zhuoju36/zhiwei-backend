@@ -38,7 +38,7 @@ def test_parse_missing_device_code() -> None:
     assert MqttAdapter._parse(p) is None
 
 
-def test_parse_missing_point_code() -> None:
+def test_parse_missing_channel_code() -> None:
     p = _good_payload()
     del p["channel_code"]
     assert MqttAdapter._parse(p) is None

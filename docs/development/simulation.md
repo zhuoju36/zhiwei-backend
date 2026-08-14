@@ -1,8 +1,10 @@
 # 模拟与冒烟（无硬件）
 
-> v0.8.0 · 更新于 2026-08-13
+> v0.8c · 更新于 2026-08-14
 
 现场没有真实硬件时，可用三套脚本完成**采集 → 入库 → 告警 → 推送**全链路的演示与压测。
+
+> v0.8b 起 ingest 按 `(device_code, channel_code)` 寻址，演示脚本与建数据链路均已对齐七层拓扑（device → point → sensor → channel）。
 
 ## 工具清单
 
@@ -22,20 +24,20 @@
 直接 POST 到 `/data/ingest`，跳过协议层。
 
 ```bash
-# 1Hz sine 波持续上报
+# 1Hz sine 波持续上报（--subitem-id 为设备所属子项）
 .venv/bin/python -m scripts.simulate_data \
-    --device-code GW-001 \
+    --subitem-id 1 --device-code GW-001 \
     --base-url http://localhost:8000 \
     --api-key edge-secret-key \
     --rate-hz 1 --duration 30
 
 # 15 秒后强制越界（演示告警链路）
 .venv/bin/python -m scripts.simulate_data \
-    --device-code GW-001 \
+    --subitem-id 1 --device-code GW-001 \
     --rate-hz 1 --duration 30 --threshold-trigger 15
 ```
 
-要求：device 下已有带 `alert_rules` 的测点（可参考 [points.md §alert_rules 字段语义](../api/points.md#alert_rules-字段语义)）。
+要求：设备下已有通道（channel）且带 `alert_rules`（见 [channels.md](../api/channels.md)）。脚本自动遍历 device → point → sensor → channel 收集全部通道。
 
 启动后到 `/api/v1/alerts` 应能看到新告警；`/api/v1/dashboard/stats` 显示活跃告警计数。
 
@@ -48,14 +50,14 @@
 ```bash
 .venv/bin/python -m scripts.mqtt_injector \
     --device-code GW-MQTT-01 \
-    --point-codes ACC-X ACC-Y TEMP \
+    --channel-codes ACC-X ACC-Y TEMP \
     --base-url http://localhost:8000 \
     --api-key edge-secret-key \
     --rate-hz 1 --mode sine --duration 60
 
 # 5 秒后强制越界
 .venv/bin/python -m scripts.mqtt_injector \
-    --device-code GW-MQTT-01 --point-codes ACC-X \
+    --device-code GW-MQTT-01 --channel-codes ACC-X \
     --rate-hz 2 --mode threshold-test --duration 30
 ```
 
@@ -75,7 +77,7 @@
 curl -X POST http://localhost:8000/api/v1/devices \
     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
     -d '{
-        "project_id": 1,
+        "subitem_id": 1,
         "device_code": "GW-MODBUS-DEMO",
         "protocol": "modbus_tcp",
         "config": {
@@ -83,17 +85,28 @@ curl -X POST http://localhost:8000/api/v1/devices \
             "device_code": "GW-MODBUS-DEMO",
             "registers": [
                 {"address": 0, "count": 2, "data_type": "float32",
-                 "point_code": "ACC-X", "scale": 0.001, "unit": "m/s2"}
+                 "channel_code": "ACC-X", "scale": 0.001, "unit": "m/s2"}
             ]
         }
     }'
 
-# C. 在该设备下创建同名测点（带 alert_rules 演示告警）
+# C. 建立 device → point → sensor → channel 链路（v0.8b 七层拓扑）
+# C1. 创建测点（物理位置）
 curl -X POST http://localhost:8000/api/v1/points \
     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+    -d '{"device_id": <DEVICE_ID>, "point_code": "P1", "point_name": "塔架测点1"}'
+
+# C2. 创建传感器（挂在测点下）
+curl -X POST http://localhost:8000/api/v1/sensors \
+    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+    -d '{"point_id": <POINT_ID>, "sensor_code": "IMU1", "model": "XYZ-123"}'
+
+# C3. 创建通道（unit / sampling_rate / alert_rules 在此层）
+curl -X POST http://localhost:8000/api/v1/channels \
+    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
     -d '{
-        "device_id": <DEVICE_ID>,
-        "point_code": "ACC-X",
+        "sensor_id": <SENSOR_ID>,
+        "channel_code": "ACC-X",
         "unit": "m/s2",
         "alert_rules": [{"operator": "gt", "threshold": 0.5, "level": "warning"}]
     }'
@@ -108,14 +121,14 @@ curl -X POST http://localhost:8000/api/v1/points \
     --max-iterations 60
 ```
 
-Ctrl+C 优雅退出；观察 `/api/v1/data/timeseries?point_id=<...>` 与 `/api/v1/alerts` 出现数据。
+Ctrl+C 优雅退出；观察 `/api/v1/data/timeseries?channel_id=<...>` 与 `/api/v1/alerts` 出现数据。
 
 ---
 
 ## 4. 常见问题
 
 - **ingest 返回 401**：检查 `--api-key` 是否与 `.env` 中 `EDGE_API_KEY` 一致
-- **找不到 device_code**：先用 `GET /api/v1/devices?project_id=<pid>` 确认设备已创建
-- **告警没触发**：确认测点的 `alert_rules` 字段已设置；sine 波幅度默认较小，可在 `modbus_simulator.py` 里把 `amp` 调大到 1.0+ 触发 0.5 阈值
+- **找不到 device_code**：先用 `GET /api/v1/devices?subitem_id=<sid>` 确认设备已创建
+- **告警没触发**：确认通道（channel）的 `alert_rules` 字段已设置；sine 波幅度默认较小，可在 `modbus_simulator.py` 里把 `amp` 调大到 1.0+ 触发 0.5 阈值
 - **modbus 连接失败**：确认 modbus_simulator 已启动且监听 0.0.0.0:5020
 - **`modbus_simulator.py` 在 pymodbus 3.14+ 启动失败**：pymodbus 3.14 重写了 server API（用 `ModbusSimulatorContext` + `SimDevice/SimData`），原 `ModbusServerContext(slaves=...)` 已 deprecated。模拟器脚本需按新版 API 改写（v0.5+ 计划）；`ModbusTcpAdapter` 客户端本身不受影响，已通过 mock 单测覆盖。

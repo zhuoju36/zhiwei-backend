@@ -31,7 +31,7 @@ CONFIG_SCHEMAS: dict[str, dict] = {
                 "address": 0,
                 "count": 2,
                 "data_type": "float32",
-                "point_code": "ACC-X",
+                "channel_code": "ACC-X",
                 "scale": 1.0,
                 "unit": "m/s2",
             }

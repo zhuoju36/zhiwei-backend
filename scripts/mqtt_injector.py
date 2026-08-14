@@ -4,7 +4,7 @@
 
 用法：
     python -m scripts.mqtt_injector \
-        --device-code GW-MQTT-01 --point-codes ACC-X ACC-Y \
+        --device-code GW-MQTT-01 --channel-codes ACC-X ACC-Y \
         --api-key edge-secret-key --base-url http://localhost:8000 \
         --rate-hz 1 --mode sine --duration 60
 """
@@ -39,7 +39,7 @@ async def run(
     base_url: str,
     api_key: str,
     device_code: str,
-    point_codes: list[str],
+    channel_codes: list[str],
     rate_hz: float,
     mode: str,
     duration: float,
@@ -56,12 +56,12 @@ async def run(
             readings = [
                 {
                     "device_code": device_code,
-                    "point_code": pc,
+                    "channel_code": pc,
                     "timestamp": datetime.now(UTC).isoformat(),
                     "value": make_value(mode, t, i),
                     "unit": "m/s2",
                 }
-                for pc in point_codes
+                for pc in channel_codes
             ]
             try:
                 resp = await client.post(
@@ -82,7 +82,7 @@ def main() -> None:
     p.add_argument("--base-url", default="http://localhost:8000")
     p.add_argument("--api-key", default="edge-secret-key")
     p.add_argument("--device-code", required=True)
-    p.add_argument("--point-codes", nargs="+", required=True)
+    p.add_argument("--channel-codes", nargs="+", required=True)
     p.add_argument("--rate-hz", type=float, default=1.0)
     p.add_argument("--mode", default="sine", choices=["sine", "random", "threshold-test"])
     p.add_argument("--duration", type=float, default=0.0, help="0 表示无限")
@@ -93,7 +93,7 @@ def main() -> None:
                 args.base_url,
                 args.api_key,
                 args.device_code,
-                args.point_codes,
+                args.channel_codes,
                 args.rate_hz,
                 args.mode,
                 args.duration,

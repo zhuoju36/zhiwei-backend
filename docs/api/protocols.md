@@ -69,7 +69,7 @@
 期望对端返回 JSON 数组：
 ```json
 [
-  {"device_code": "GW-001", "point_code": "ACC-X", "value": 0.42, "unit": "m/s2", "quality": "good"}
+  {"device_code": "GW-001", "channel_code": "ACC-X", "value": 0.42, "unit": "m/s2", "quality": "good"}
 ]
 ```
 
@@ -87,9 +87,9 @@
   "sample_interval_ms": 1000,
   "registers": [
     {"address": 0, "count": 2, "data_type": "float32",
-     "point_code": "ACC-X", "scale": 0.001, "unit": "m/s2"},
+     "channel_code": "ACC-X", "scale": 0.001, "unit": "m/s2"},
     {"address": 2, "count": 1, "data_type": "uint16",
-     "point_code": "TEMP", "scale": 0.1, "unit": "°C"}
+     "channel_code": "TEMP", "scale": 0.1, "unit": "°C"}
   ]
 }
 ```
@@ -98,13 +98,13 @@
 |------|------|
 | `host` / `port` | Modbus TCP 服务地址 |
 | `slave_id` | Modbus 从站地址（默认 1） |
-| `registers` | 每个元素定义一个测点的寄存器映射 |
+| `registers` | 每个元素定义一个通道的寄存器映射 |
 | `registers[].address` | 起始寄存器地址 |
 | `registers[].count` | 寄存器数量（按 data_type 默认推断） |
 | `registers[].data_type` | 解码类型，默认 `uint16` |
 | `registers[].scale` | 解码后乘以的缩放因子，默认 1.0 |
 | `registers[].unit` | 单位（透传到 RawReading.unit） |
-| `registers[].point_code` | 测点编码 |
+| `registers[].channel_code` | 通道编码（对应 `channels.channel_code`，v0.8b 起） |
 
 错误恢复：单寄存器读取失败时，该点返回 `quality="bad"`，不影响其他点继续返回。
 
@@ -130,7 +130,7 @@
 ```json
 {
   "device_code": "GW-MQTT-01",
-  "point_code": "ACC-X",
+  "channel_code": "ACC-X",
   "value": 0.42,
   "unit": "m/s2",
   "quality": "good",
@@ -178,7 +178,7 @@ curl http://localhost:8000/api/v1/protocols -H "Authorization: Bearer $TOKEN"
 curl -X POST http://localhost:8000/api/v1/devices \
     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
     -d '{
-        "project_id": 1,
+        "subitem_id": 1,
         "device_code": "GW-MOD-001",
         "protocol": "modbus_tcp",
         "config": {
@@ -186,7 +186,7 @@ curl -X POST http://localhost:8000/api/v1/devices \
             "device_code": "GW-MOD-001",
             "registers": [
                 {"address": 0, "count": 2, "data_type": "float32",
-                 "point_code": "ACC-X", "scale": 0.001, "unit": "m/s2"}
+                 "channel_code": "ACC-X", "scale": 0.001, "unit": "m/s2"}
             ]
         }
     }'
@@ -195,7 +195,7 @@ curl -X POST http://localhost:8000/api/v1/devices \
 curl -X POST http://localhost:8000/api/v1/devices \
     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
     -d '{
-        "project_id": 1,
+        "subitem_id": 1,
         "device_code": "GW-MQTT-01",
         "protocol": "mqtt",
         "config": {

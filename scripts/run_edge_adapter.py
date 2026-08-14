@@ -44,7 +44,6 @@ def build_adapter(protocol: str, device_code: str, config: dict[str, Any]) -> Pr
         port=int(config.get("port", 0)),
         sample_interval_ms=int(config.get("sample_interval_ms", 1000)),
         timeout_ms=int(config.get("timeout_ms", 5000)),
-        register_map=config.get("register_map", {}),
         extra=config,
     )
     adapter = cls(cfg)
@@ -60,7 +59,7 @@ async def push_ingest(
         "readings": [
             {
                 "device_code": r.device_code,
-                "point_code": r.point_code,
+                "channel_code": r.channel_code,
                 "timestamp": r.timestamp.isoformat(),
                 "value": r.value,
                 "unit": r.unit,
