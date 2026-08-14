@@ -14,22 +14,21 @@ from app.database import AsyncSessionLocal
 from app.dtus.server import TcpServerManager
 from app.models.channel import Channel
 from app.models.device import Device
-from app.models.point import Point
+from app.models.project import Project
 from app.models.sensor import Sensor
-from app.models.subitem import Subitem
 from app.services.data_service import get_pool
 from tests.test_modbus_rtu_framer import rtu_response
 
 
 async def _make_dtu_chain() -> tuple[int, int, int]:
-    """建 subitem → device(modbus_rtu_over_tcp, port=0) → point → sensor → channel。"""
+    """建 project → device(modbus_rtu_over_tcp, port=0) → sensor → channel。"""
     s = uuid.uuid4().hex[:8]
     async with AsyncSessionLocal() as db:
-        sub = Subitem(name=f"dtu-test-{s}")
+        sub = Project(name=f"dtu-test-{s}")
         db.add(sub)
         await db.flush()
         device = Device(
-            subitem_id=sub.id,
+            project_id=sub.id,
             device_code=f"GW-DTU-{s}",
             protocol="modbus_rtu_over_tcp",
             config={
@@ -51,10 +50,8 @@ async def _make_dtu_chain() -> tuple[int, int, int]:
         )
         db.add(device)
         await db.flush()
-        point = Point(device_id=device.id, point_code=f"PT-{s}")
-        db.add(point)
         await db.flush()
-        sensor = Sensor(point_id=point.id, sensor_code=f"S-{s}")
+        sensor = Sensor(device_id=device.id, sensor_code=f"S-{s}")
         db.add(sensor)
         await db.flush()
         channel = Channel(sensor_id=sensor.id, channel_code="TEMP", unit="°C", sampling_rate=1)
@@ -66,22 +63,13 @@ async def _make_dtu_chain() -> tuple[int, int, int]:
 
 async def _cleanup(proj_id: int, dev_id: int, ch_id: int) -> None:
     async with AsyncSessionLocal() as db:
-        from sqlalchemy import select
-
         from app.models.reading import Reading
 
         await db.execute(delete(Reading).where(Reading.channel_id == ch_id))
         await db.execute(delete(Channel).where(Channel.id == ch_id))
-        await db.execute(
-            delete(Sensor).where(
-                Sensor.point_id.in_(
-                    select(Point.id).where(Point.device_id == dev_id).scalar_subquery()
-                )
-            )
-        )
-        await db.execute(delete(Point).where(Point.device_id == dev_id))
+        await db.execute(delete(Sensor).where(Sensor.device_id == dev_id))
         await db.execute(delete(Device).where(Device.id == dev_id))
-        await db.execute(delete(Subitem).where(Subitem.id == proj_id))
+        await db.execute(delete(Project).where(Project.id == proj_id))
         await db.commit()
 
 

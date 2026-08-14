@@ -45,7 +45,7 @@ interface AlertRule {
 
 ## 权限
 
-与设备相同（子项级访问 / 写权限；删除需全局 admin）。
+与设备相同（项目级访问 / 写权限；删除需全局 admin）。
 
 ---
 
@@ -73,7 +73,7 @@ interface AlertRule {
 
 | HTTP | code | 说明 |
 |------|------|------|
-| 403 | `FORBIDDEN` | 未被授权访问所属子项 |
+| 403 | `FORBIDDEN` | 未被授权访问所属项目 |
 | 404 | `SENSOR_NOT_FOUND` | 传感器不存在 |
 
 ---
@@ -106,7 +106,7 @@ interface AlertRule {
 
 | HTTP | code | 说明 |
 |------|------|------|
-| 403 | `FORBIDDEN` | 无子项写权限 |
+| 403 | `FORBIDDEN` | 无项目写权限 |
 | 404 | `SENSOR_NOT_FOUND` | 传感器不存在 |
 | 409 | `CHANNEL_CODE_EXISTS` | 同传感器下 channel_code 已存在 |
 | 422 | `VALIDATION_ERROR` | alert_rules 中 operator / level 非法 |

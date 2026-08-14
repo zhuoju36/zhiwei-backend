@@ -1,4 +1,4 @@
-"""WebSocket 连接管理：subitem_id -> [WebSocket]，Redis Pub/Sub 跨实例广播。"""
+"""WebSocket 连接管理：project_id -> [WebSocket]，Redis Pub/Sub 跨实例广播。"""
 
 import asyncio
 import logging
@@ -26,34 +26,34 @@ class ConnectionManager:
         if self._redis:
             await self._redis.aclose()
 
-    async def connect(self, websocket: WebSocket, subitem_id: int) -> None:
+    async def connect(self, websocket: WebSocket, project_id: int) -> None:
         # 假设调用方（ws_data 端点）已经 accept；这里只注册到内存映射。
         # 实际 accept 由 ws_data 在 token 校验通过后统一调用（单一入口）。
-        self.active_connections[subitem_id].append(websocket)
+        self.active_connections[project_id].append(websocket)
 
-    async def disconnect(self, websocket: WebSocket, subitem_id: int) -> None:
-        if websocket in self.active_connections.get(subitem_id, []):
-            self.active_connections[subitem_id].remove(websocket)
+    async def disconnect(self, websocket: WebSocket, project_id: int) -> None:
+        if websocket in self.active_connections.get(project_id, []):
+            self.active_connections[project_id].remove(websocket)
 
     async def _broadcast_listener(self) -> None:
         """监听 Redis 频道，向本地 WebSocket 连接推送。"""
         assert self._redis is not None
         pubsub = self._redis.pubsub()
-        await pubsub.psubscribe("subitem:*")
+        await pubsub.psubscribe("project:*")
         try:
             async for message in pubsub.listen():
                 if message["type"] != "pmessage":
                     continue
-                subitem_id = int(message["channel"].split(":")[1])
+                project_id = int(message["channel"].split(":")[1])
                 data = message["data"]
                 disconnected = []
-                for ws in self.active_connections.get(subitem_id, []):
+                for ws in self.active_connections.get(project_id, []):
                     try:
                         await ws.send_text(data)
                     except Exception:
                         disconnected.append(ws)
                 for ws in disconnected:
-                    await self.disconnect(ws, subitem_id)
+                    await self.disconnect(ws, project_id)
         except asyncio.CancelledError:
             raise
         except Exception:

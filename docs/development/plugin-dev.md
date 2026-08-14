@@ -95,7 +95,7 @@ class MyPlugin(AnalysisPlugin):
 ```python
 class ModalPlugin(AnalysisPlugin):
     name = "modal"
-    input_channels = 4  # 同子项 4 个通道同步分析
+    input_channels = 4  # 同项目 4 个通道同步分析
 
     async def analyze(self, data: AnalysisInput, config):
         arrays = data.data  # {channel_id: np.ndarray}
@@ -103,7 +103,7 @@ class ModalPlugin(AnalysisPlugin):
         return AnalysisOutput(summary={...})
 ```
 
-约束：多通道必须属于**同一子项**（框架校验，防止越权跨项目拉数据）。
+约束：多通道必须属于**同一项目**（框架校验，防止越权跨项目拉数据）。
 
 ## 5. 发布为第三方包（pip install 即接入）
 

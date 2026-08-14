@@ -74,7 +74,7 @@ HTML 模板示例（warning 橙色、`#fd7e14`；danger 红色 `#dc3545`；info 
 <h2 style="color: #fd7e14;">[SHM] 告警 WARNING</h2>
 <table>
   <tr><td>告警 ID</td><td>#42</td></tr>
-  <tr><td>子项</td><td>1</td></tr>
+  <tr><td>项目</td><td>1</td></tr>
   <tr><td>设备 / 测点</td><td>GW-001 / ACC-X</td></tr>
   <tr><td>当前值</td><td style="color:#fd7e14;"><b>0.99</b></td></tr>
   <tr><td>阈值</td><td>0.5</td></tr>
@@ -87,7 +87,7 @@ HTML 模板示例（warning 橙色、`#fd7e14`；danger 红色 `#dc3545`；info 
 
 每次 `POST /data/ingest` 落库后，Celery `alerts` 队列消费 `_process_readings`：
 
-1. 评估每条 reading vs `points.alert_rules`
+1. 评估每条 reading vs `channels.alert_rules`
 2. 触发 → `trigger_alert`（含抑制窗口重开语义）
 3. **created=True** 时（新建 / 重开） → 构造 `AlertPayload` → 并发 `dispatch_alert(payload)`
 4. 关闭 / 自动恢复 → **不通知**
@@ -106,7 +106,7 @@ HTML 模板示例（warning 橙色、`#fd7e14`；danger 红色 `#dc3545`；info 
 
 ## 未实现（v0.7+）
 
-- 每子项通道配置（DB 表）
+- 每项目通道配置（DB 表）
 - 钉钉/企微/Slack/PagerDuty 专属 payload 包装
 - 通知发送速率限制与去重
 - 通知模板（jinja2）

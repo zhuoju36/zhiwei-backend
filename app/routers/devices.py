@@ -8,8 +8,8 @@ from app.dependencies import (
     AdminUser,
     CurrentUser,
     DbSession,
-    check_subitem_access,
-    check_subitem_write_access,
+    check_project_access,
+    check_project_write_access,
 )
 from app.schemas.base import PageSchema
 from app.schemas.device import DeviceCreate, DeviceOut, DeviceUpdate
@@ -22,12 +22,12 @@ router = create_router(prefix="/devices", tags=["设备"])
 async def list_devices(
     db: DbSession,
     current_user: CurrentUser,
-    subitem_id: int = Query(..., description="子项 ID"),
+    project_id: int = Query(..., description="子项 ID"),
     page: int = Query(1, ge=1),
     size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
 ) -> PageSchema[DeviceOut]:
-    await check_subitem_access(db, current_user, subitem_id)
-    devices, total = await DeviceService.list_by_subitem(db, subitem_id, page, size)
+    await check_project_access(db, current_user, project_id)
+    devices, total = await DeviceService.list_by_project(db, project_id, page, size)
     return PageSchema(
         total=total,
         page=page,
@@ -40,7 +40,7 @@ async def list_devices(
 async def create_device(
     payload: DeviceCreate, db: DbSession, current_user: CurrentUser
 ) -> DeviceOut:
-    await check_subitem_write_access(db, current_user, payload.subitem_id)
+    await check_project_write_access(db, current_user, payload.project_id)
     device = await DeviceService.create(db, payload)
     return DeviceOut.model_validate(device)
 
@@ -48,7 +48,7 @@ async def create_device(
 @router.get("/{device_id}", response_model=DeviceOut)
 async def get_device(device_id: int, db: DbSession, current_user: CurrentUser) -> DeviceOut:
     device = await DeviceService.get(db, device_id)
-    await check_subitem_access(db, current_user, device.subitem_id)
+    await check_project_access(db, current_user, device.project_id)
     return DeviceOut.model_validate(device)
 
 
@@ -60,7 +60,7 @@ async def update_device(
     current_user: CurrentUser,
 ) -> DeviceOut:
     device = await DeviceService.get(db, device_id)
-    await check_subitem_write_access(db, current_user, device.subitem_id)
+    await check_project_write_access(db, current_user, device.project_id)
     updated = await DeviceService.update(db, device_id, payload)
     return DeviceOut.model_validate(updated)
 

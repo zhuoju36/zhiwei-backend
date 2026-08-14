@@ -32,7 +32,7 @@ async def _run(model_id: int) -> dict:
 
     async with AsyncSessionLocal() as db:
         model = await model_service.ModelService.get(db, model_id)
-        subitem_id = model.subitem_id
+        project_id = model.project_id
         original_key = model.original_key
         source_format = model.source_format
 
@@ -49,7 +49,7 @@ async def _run(model_id: int) -> dict:
             await db.commit()
         return {"status": "failed", "error": str(exc)}
 
-    glb_key = f"models/{subitem_id}/{uuid.uuid4().hex}.glb"
+    glb_key = f"models/{project_id}/{uuid.uuid4().hex}.glb"
     await minio_client.put_bytes(glb_key, glb, content_type="model/gltf-binary")
 
     async with AsyncSessionLocal() as db:

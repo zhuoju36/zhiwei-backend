@@ -204,7 +204,7 @@ curl http://localhost:8000/api/v1/protocols -H "Authorization: Bearer $TOKEN"
 curl -X POST http://localhost:8000/api/v1/devices \
     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
     -d '{
-        "subitem_id": 1,
+        "project_id": 1,
         "device_code": "GW-MOD-001",
         "protocol": "modbus_tcp",
         "config": {
@@ -221,7 +221,7 @@ curl -X POST http://localhost:8000/api/v1/devices \
 curl -X POST http://localhost:8000/api/v1/devices \
     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
     -d '{
-        "subitem_id": 1,
+        "project_id": 1,
         "device_code": "GW-MQTT-01",
         "protocol": "mqtt",
         "config": {

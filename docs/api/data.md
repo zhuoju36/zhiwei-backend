@@ -11,7 +11,7 @@
 | 接口 | 鉴权 | 谁能调用 |
 |------|------|----------|
 | `POST /data/ingest` | `X-API-Key` | 边缘网关（持有 EDGE_API_KEY） |
-| `GET /data/timeseries` | JWT Bearer | 已被授权对应子项的用户或 admin |
+| `GET /data/timeseries` | JWT Bearer | 已被授权对应项目的用户或 admin |
 | `GET /data/latest/{channel_id}` | JWT Bearer | 同上 |
 | `WS /ws/data` | JWT in query (`?token=`) | 登录用户 |
 
@@ -166,7 +166,7 @@ curl -X POST http://localhost:8000/api/v1/data/ingest \
 | HTTP | code | 说明 |
 |------|------|------|
 | 401 | `AUTH_ERROR` | 未登录或 token 失效 |
-| 403 | `FORBIDDEN` | 未被授权访问该通道所属子项 |
+| 403 | `FORBIDDEN` | 未被授权访问该通道所属项目 |
 | 404 | `CHANNEL_NOT_FOUND` | 通道不存在 |
 
 ### curl 示例
@@ -221,7 +221,7 @@ curl -G http://localhost:8000/api/v1/data/timeseries \
 
 ## WS /ws/data
 
-WebSocket 实时推送。客户端订阅子项频道后，接收该子项的实时读数与告警。
+WebSocket 实时推送。客户端订阅项目频道后，接收该项目的实时读数与告警。
 
 ### 连接
 
@@ -231,16 +231,16 @@ ws://<host>/ws/data?token=<access_token>
 
 ### 客户端 → 服务端
 
-订阅子项：
+订阅项目：
 
 ```json
-{ "type": "cmd:subscribe", "subitem_id": 1 }
+{ "type": "cmd:subscribe", "project_id": 1 }
 ```
 
 服务端回复：
 
 ```json
-{ "type": "cmd:subscribed", "subitem_id": 1 }
+{ "type": "cmd:subscribed", "project_id": 1 }
 ```
 
 ### 服务端 → 客户端
@@ -262,7 +262,7 @@ ws://<host>/ws/data?token=<access_token>
 }
 ```
 
-告警事件（由 Celery `alerts` 队列异步推送，前端在订阅子项频道后接收）：
+告警事件（由 Celery `alerts` 队列异步推送，前端在订阅项目频道后接收）：
 
 ```json
 {
@@ -290,7 +290,7 @@ ws://<host>/ws/data?token=<access_token>
 ### 错误
 
 - 连接时 token 无效 / 过期：服务关闭连接（close code `4401`）
-- 子项 ID 无效：当前不主动通知客户端；建议前端校验后发送
+- 项目 ID 无效：当前不主动通知客户端；建议前端校验后发送
 
 ### 客户端示例（Python）
 
@@ -300,7 +300,7 @@ import asyncio, json, websockets
 
 async def main():
     async with websockets.connect(f"ws://localhost:8000/ws/data?token={TOKEN}") as ws:
-        await ws.send(json.dumps({"type": "cmd:subscribe", "subitem_id": 1}))
+        await ws.send(json.dumps({"type": "cmd:subscribe", "project_id": 1}))
         async for msg in ws:
             data = json.loads(msg)
             print(data)
@@ -311,7 +311,7 @@ asyncio.run(main())
 
 ### 注意事项
 
-- WebSocket 端点已做子项权限校验（v0.5+）：订阅前校验 `check_subitem_access`，失败返回 `cmd:error` + close code `4403`
-- 多实例部署时实时推送通过 Redis Pub/Sub 跨实例广播（`app/ws/manager.py`），频道 `subitem:{id}`
+- WebSocket 端点已做项目权限校验（v0.5+）：订阅前校验 `check_project_access`，失败返回 `cmd:error` + close code `4403`
+- 多实例部署时实时推送通过 Redis Pub/Sub 跨实例广播（`app/ws/manager.py`），频道 `project:{id}`
 - 单通道推送频率受边缘网关采集频率影响；前端展示时建议按时间窗口合并渲染
 - 告警事件由 `app/tasks/alert_tasks.py` 在 `POST /data/ingest` 完成后异步推送，与实时数据共享同一 Redis 频道

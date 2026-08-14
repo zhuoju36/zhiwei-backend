@@ -11,7 +11,7 @@ from sqlalchemy import delete, select
 
 from app.config import settings
 from app.database import AsyncSessionLocal
-from app.models import Channel, Device, Point, Sensor, Subitem
+from app.models import Channel, Device, Project, Sensor
 from tests.conftest import login_headers
 
 API_KEY_HEADERS = {"X-API-Key": settings.edge_api_key}
@@ -19,14 +19,14 @@ API_KEY_HEADERS = {"X-API-Key": settings.edge_api_key}
 
 @pytest.fixture
 async def channel_fixture() -> AsyncGenerator[dict, None]:
-    """创建完整的 subitem → device → point → sensor → channel 链路，用后删除。"""
+    """创建完整的 project → device → point → sensor → channel 链路，用后删除。"""
     suffix = uuid.uuid4().hex[:8]
     async with AsyncSessionLocal() as db:
-        subitem = Subitem(name=f"ingest-test-{suffix}")
-        db.add(subitem)
+        project = Project(name=f"ingest-test-{suffix}")
+        db.add(project)
         await db.flush()
         device = Device(
-            subitem_id=subitem.id,
+            project_id=project.id,
             device_code=f"GW-{suffix}",
             device_name="测试网关",
             protocol="http_json",
@@ -34,10 +34,7 @@ async def channel_fixture() -> AsyncGenerator[dict, None]:
         )
         db.add(device)
         await db.flush()
-        point = Point(device_id=device.id, point_code=f"P-{suffix}")
-        db.add(point)
-        await db.flush()
-        sensor = Sensor(point_id=point.id, sensor_code=f"S-{suffix}")
+        sensor = Sensor(device_id=device.id, sensor_code=f"S-{suffix}")
         db.add(sensor)
         await db.flush()
         channel = Channel(
@@ -50,9 +47,8 @@ async def channel_fixture() -> AsyncGenerator[dict, None]:
         db.add(channel)
         await db.commit()
         ids = {
-            "subitem_id": subitem.id,
+            "project_id": project.id,
             "device_id": device.id,
-            "point_id": point.id,
             "sensor_id": sensor.id,
             "channel_id": channel.id,
             "device_code": device.device_code,
@@ -66,11 +62,8 @@ async def channel_fixture() -> AsyncGenerator[dict, None]:
         await db.execute(delete(Reading).where(Reading.channel_id == ids["channel_id"]))
         await db.commit()
 
-        subitem = await db.get(Subitem, ids["subitem_id"])
+        project = await db.get(Project, ids["project_id"])
         device = await db.get(Device, ids["device_id"])
-        point = (
-            await db.execute(select(Point).where(Point.id == ids["point_id"]))
-        ).scalar_one_or_none()
         sensor = (
             await db.execute(select(Sensor).where(Sensor.id == ids["sensor_id"]))
         ).scalar_one_or_none()
@@ -81,12 +74,10 @@ async def channel_fixture() -> AsyncGenerator[dict, None]:
             await db.delete(channel)
         if sensor:
             await db.delete(sensor)
-        if point:
-            await db.delete(point)
         if device:
             await db.delete(device)
-        if subitem:
-            await db.delete(subitem)
+        if project:
+            await db.delete(project)
         await db.commit()
 
 

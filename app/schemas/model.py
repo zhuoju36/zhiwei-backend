@@ -14,7 +14,7 @@ class ModelOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    subitem_id: int
+    project_id: int
     original_name: str
     source_format: str
     glb_key: str | None

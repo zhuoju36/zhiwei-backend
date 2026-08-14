@@ -45,16 +45,13 @@ class ChannelService:
     async def list_by_device(
         db: AsyncSession, device_id: int, page: int, size: int
     ) -> tuple[list[Channel], int]:
-        """按 device 列出全部 channel（JOIN point → sensor → channel）。"""
-        from app.models.point import Point
-
+        """按 device 列出全部 channel（JOIN sensor → channel）。"""
         total = (
             await db.execute(
                 select(func.count())
                 .select_from(Channel)
                 .join(Sensor, Sensor.id == Channel.sensor_id)
-                .join(Point, Point.id == Sensor.point_id)
-                .where(Point.device_id == device_id)
+                .where(Sensor.device_id == device_id)
             )
         ).scalar_one()
         rows = (
@@ -62,8 +59,7 @@ class ChannelService:
                 await db.execute(
                     select(Channel)
                     .join(Sensor, Sensor.id == Channel.sensor_id)
-                    .join(Point, Point.id == Sensor.point_id)
-                    .where(Point.device_id == device_id)
+                    .where(Sensor.device_id == device_id)
                     .order_by(Channel.id)
                     .offset((page - 1) * size)
                     .limit(size)

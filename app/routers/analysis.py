@@ -10,8 +10,8 @@ from app.core.middleware import create_router
 from app.dependencies import (
     CurrentUser,
     DbSession,
-    check_subitem_access,
-    check_subitem_write_access,
+    check_project_access,
+    check_project_write_access,
 )
 from app.models.channel import Channel
 from app.schemas.analysis import (
@@ -22,7 +22,7 @@ from app.schemas.analysis import (
 )
 from app.schemas.base import PageSchema
 from app.services import analysis_service
-from app.services.data_service import check_channel_subitem
+from app.services.data_service import check_channel_project
 from app.tasks.analysis_tasks import run_analysis_job
 from app.utils import minio_client
 
@@ -64,8 +64,8 @@ async def submit_job(
     db: DbSession,
     current_user: CurrentUser,
 ) -> AnalysisSubmitOut:
-    subitem_id = await check_channel_subitem(payload.channel_id)
-    await check_subitem_write_access(db, current_user, subitem_id)
+    project_id = await check_channel_project(payload.channel_id)
+    await check_project_write_access(db, current_user, project_id)
     analysis_service.validate_plugin(payload.plugin)
     job = await analysis_service.create_job(
         db, payload.channel_id, payload.plugin, payload.params, current_user.id
@@ -89,8 +89,8 @@ async def list_jobs(
     size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
 ) -> PageSchema[AnalysisJobOut]:
     if channel_id is not None:
-        subitem_id = await check_channel_subitem(channel_id)
-        await check_subitem_access(db, current_user, subitem_id)
+        project_id = await check_channel_project(channel_id)
+        await check_project_access(db, current_user, project_id)
 
     rows, total = await analysis_service.list_jobs(
         db, channel_id=channel_id, plugin=plugin, status=status, page=page, size=size
@@ -107,8 +107,8 @@ async def list_jobs(
 async def get_job(job_id: int, db: DbSession, current_user: CurrentUser) -> AnalysisJobOut:
     job = await analysis_service.get_job(db, job_id)
     channel = await db.get(Channel, job.channel_id)
-    subitem_id = await check_channel_subitem(channel.id)
-    await check_subitem_access(db, current_user, subitem_id)
+    project_id = await check_channel_project(channel.id)
+    await check_project_access(db, current_user, project_id)
     return _job_to_out(job)
 
 
@@ -116,8 +116,8 @@ async def get_job(job_id: int, db: DbSession, current_user: CurrentUser) -> Anal
 async def get_job_result(job_id: int, db: DbSession, current_user: CurrentUser) -> Response:
     job = await analysis_service.get_job(db, job_id)
     channel = await db.get(Channel, job.channel_id)
-    subitem_id = await check_channel_subitem(channel.id)
-    await check_subitem_access(db, current_user, subitem_id)
+    project_id = await check_channel_project(channel.id)
+    await check_project_access(db, current_user, project_id)
     if job.status != "success" or not job.result_key:
         from app.core.exceptions import BizException
 

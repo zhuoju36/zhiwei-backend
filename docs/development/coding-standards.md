@@ -125,7 +125,7 @@ class FooAdapter(ProtocolAdapter):
 
 ## 8. 导入排序与 Lint
 
-子项使用 ruff，配置在 `pyproject.toml`：
+项目使用 ruff，配置在 `pyproject.toml`：
 
 - `select = ["E", "F", "I", "UP", "B", "ASYNC"]`
 - `line-length = 100`

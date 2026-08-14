@@ -17,10 +17,10 @@ from app.dependencies import (
     AdminUser,
     CurrentUser,
     DbSession,
-    check_subitem_access,
-    check_subitem_write_access,
+    check_project_access,
+    check_project_write_access,
 )
-from app.models.subitem import Subitem
+from app.models.project import Project
 from app.schemas.base import PageSchema
 from app.schemas.model import ModelOut, ModelUploadOut
 from app.services.model_service import ModelService
@@ -34,17 +34,17 @@ MAX_MODEL_BYTES = 200 * 1024 * 1024  # 200MB，开发阶段一次性读入内存
 router = create_router(prefix="/models", tags=["模型"])
 
 
-@router.post("/{subitem_id}/upload", response_model=ModelUploadOut, status_code=201)
+@router.post("/{project_id}/upload", response_model=ModelUploadOut, status_code=201)
 async def upload_model(
-    subitem_id: int,
+    project_id: int,
     db: DbSession,
     current_user: CurrentUser,
     file: Annotated[UploadFile, File(description="源模型文件（.obj/.stl/.ply/.gltf/.glb）")],
 ) -> ModelUploadOut:
-    subitem = await db.get(Subitem, subitem_id)
-    if subitem is None:
-        raise BizException(code="SUBITEM_NOT_FOUND", message="子项不存在", status_code=404)
-    await check_subitem_write_access(db, current_user, subitem_id)
+    project = await db.get(Project, project_id)
+    if project is None:
+        raise BizException(code="PROJECT_NOT_FOUND", message="子项不存在", status_code=404)
+    await check_project_write_access(db, current_user, project_id)
 
     name = file.filename or "model"
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
@@ -66,10 +66,10 @@ async def upload_model(
     if not data:
         raise BizException(code="MODEL_EMPTY", message="上传文件为空", status_code=400)
 
-    original_key = f"models/{subitem_id}/{uuid.uuid4().hex}.{ext}"
+    original_key = f"models/{project_id}/{uuid.uuid4().hex}.{ext}"
     await minio_client.put_bytes(original_key, data)
 
-    model = await ModelService.create(db, subitem_id, original_key, name, ext, current_user.id)
+    model = await ModelService.create(db, project_id, original_key, name, ext, current_user.id)
     await db.commit()
     await db.refresh(model)
     model_id = model.id
@@ -91,12 +91,12 @@ async def upload_model(
 async def list_models(
     db: DbSession,
     current_user: CurrentUser,
-    subitem_id: int = Query(..., description="按子项筛选"),
+    project_id: int = Query(..., description="按子项筛选"),
     page: int = Query(1, ge=1),
     size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
 ) -> PageSchema[ModelOut]:
-    await check_subitem_access(db, current_user, subitem_id)
-    rows, total = await ModelService.list_by_subitem(db, subitem_id, page, size)
+    await check_project_access(db, current_user, project_id)
+    rows, total = await ModelService.list_by_project(db, project_id, page, size)
     return PageSchema(
         total=total,
         page=page,
@@ -108,7 +108,7 @@ async def list_models(
 @router.get("/{model_id}", response_model=ModelOut)
 async def get_model(model_id: int, db: DbSession, current_user: CurrentUser) -> ModelOut:
     model = await ModelService.get(db, model_id)
-    await check_subitem_access(db, current_user, model.subitem_id)
+    await check_project_access(db, current_user, model.project_id)
     return ModelOut.model_validate(model)
 
 
@@ -116,7 +116,7 @@ async def get_model(model_id: int, db: DbSession, current_user: CurrentUser) -> 
 async def get_model_file(model_id: int, db: DbSession, current_user: CurrentUser) -> Response:
     """返回转换后的 GLB 文件（未转换完成时 409）。"""
     model = await ModelService.get(db, model_id)
-    await check_subitem_access(db, current_user, model.subitem_id)
+    await check_project_access(db, current_user, model.project_id)
     if model.status != "success" or not model.glb_key:
         raise BizException(
             code="MODEL_NOT_READY",

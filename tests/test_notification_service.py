@@ -13,7 +13,7 @@ from app.services import notification_service
 SAMPLE: AlertPayload = {
     "alert_id": 1,
     "channel_id": 1,
-    "subitem_id": 1,
+    "project_id": 1,
     "level": "warning",
     "value": 0.99,
     "threshold": 0.5,

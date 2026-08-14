@@ -16,11 +16,10 @@ from app.routers import (
     devices,
     models,
     platform,
-    points,
+    projects,
     protocols,
     sensors,
     setup,
-    subitems,
     users,
 )
 
@@ -29,10 +28,9 @@ api_router.include_router(setup.router)
 api_router.include_router(platform.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
-api_router.include_router(subitems.router)
+api_router.include_router(projects.router)
 api_router.include_router(protocols.router)
 api_router.include_router(devices.router)
-api_router.include_router(points.router)
 api_router.include_router(sensors.router)
 api_router.include_router(channels.router)
 api_router.include_router(data.router)

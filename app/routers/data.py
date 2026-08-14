@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import Depends, Query
 
 from app.core.middleware import create_router
-from app.dependencies import CurrentUser, DbSession, check_subitem_access, verify_api_key
+from app.dependencies import CurrentUser, DbSession, check_project_access, verify_api_key
 from app.schemas.data import DataBatchIngest, TimeSeriesOut
 from app.services import data_service
 
@@ -23,8 +23,8 @@ async def get_timeseries(
     interval: str = Query("raw", description="聚合间隔: raw/100ms/1s/1m/1h/1d"),
 ) -> TimeSeriesOut:
     # 权限检查：用户是否有该通道所属子项的权限
-    subitem_id = await data_service.check_channel_subitem(channel_id)
-    await check_subitem_access(db, current_user, subitem_id)
+    project_id = await data_service.check_channel_project(channel_id)
+    await check_project_access(db, current_user, project_id)
 
     data = await data_service.query_timeseries(channel_id, start, end, interval)
     return TimeSeriesOut(channel_id=channel_id, interval=interval, data=data)
@@ -34,8 +34,8 @@ async def get_timeseries(
 async def get_latest_value(
     channel_id: int, db: DbSession, current_user: CurrentUser
 ) -> dict | None:
-    subitem_id = await data_service.check_channel_subitem(channel_id)
-    await check_subitem_access(db, current_user, subitem_id)
+    project_id = await data_service.check_channel_project(channel_id)
+    await check_project_access(db, current_user, project_id)
     return await data_service.get_latest(channel_id)
 
 

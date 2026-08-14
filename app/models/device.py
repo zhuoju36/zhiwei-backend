@@ -12,15 +12,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
-    from app.models.point import Point
-    from app.models.subitem import Subitem
+    from app.models.project import Project
+    from app.models.sensor import Sensor
 
 
 class Device(Base):
     __tablename__ = "devices"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    subitem_id: Mapped[int] = mapped_column(ForeignKey("subitems.id"), nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), nullable=False)
     device_code: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False
     )  # 设备唯一编码
@@ -31,5 +31,5 @@ class Device(Base):
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    subitem: Mapped[Subitem] = relationship(back_populates="devices")
-    points: Mapped[list[Point]] = relationship(back_populates="device")
+    project: Mapped[Project] = relationship(back_populates="devices")
+    sensors: Mapped[list[Sensor]] = relationship(back_populates="device")

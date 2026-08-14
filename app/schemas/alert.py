@@ -26,8 +26,7 @@ class AlertOut(BaseModel):
 class AlertListQuery(BaseModel):
     """告警列表查询参数（也可用 FastAPI Query 直接声明）。"""
 
-    subitem_id: int | None = None
-    point_id: int | None = None
+    project_id: int | None = None
     level: AlertLevel | None = None
     is_resolved: bool | None = None
     start: datetime | None = None

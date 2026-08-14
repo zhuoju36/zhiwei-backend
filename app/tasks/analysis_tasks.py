@@ -19,7 +19,6 @@ from sqlalchemy import select
 from app.database import AsyncSessionLocal
 from app.models.channel import Channel
 from app.models.device import Device
-from app.models.point import Point
 from app.models.sensor import Sensor
 from app.plugins.analyzers.base import AnalysisInput
 from app.plugins.analyzers.registry import AnalyzerRegistry
@@ -61,20 +60,19 @@ async def _fetch_samples(channel_id: int, start_iso: str | None, end_iso: str | 
 async def _resolve_channels(db, channel_ids: list[int]) -> tuple[list[Channel], int]:
     """加载通道行，校验同属一个子项（多通道分析不允许跨子项）。"""
     stmt = (
-        select(Channel, Device.subitem_id)
+        select(Channel, Device.project_id)
         .join(Sensor, Sensor.id == Channel.sensor_id)
-        .join(Point, Point.id == Sensor.point_id)
-        .join(Device, Device.id == Point.device_id)
+        .join(Device, Device.id == Sensor.device_id)
         .where(Channel.id.in_(channel_ids))
     )
     rows = (await db.execute(stmt)).all()
     if len(rows) != len(channel_ids):
         raise ValueError("通道不存在")
     channels = [r[0] for r in rows]
-    subitem_ids = {r[1] for r in rows}
-    if len(subitem_ids) > 1:
+    project_ids = {r[1] for r in rows}
+    if len(project_ids) > 1:
         raise ValueError("多通道分析要求所有通道属于同一子项")
-    return channels, subitem_ids.pop()
+    return channels, project_ids.pop()
 
 
 async def _run(job_id: int) -> dict[str, Any]:

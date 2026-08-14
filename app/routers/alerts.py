@@ -9,14 +9,14 @@ from app.core.middleware import create_router
 from app.dependencies import (
     CurrentUser,
     DbSession,
-    check_subitem_access,
-    check_subitem_admin,
+    check_project_access,
+    check_project_admin,
 )
 from app.models.channel import Channel
 from app.schemas.alert import AlertOut
 from app.schemas.base import PageSchema
 from app.services import alert_service
-from app.services.data_service import check_channel_subitem
+from app.services.data_service import check_channel_project
 
 router = create_router(prefix="/alerts", tags=["告警"])
 
@@ -25,7 +25,7 @@ router = create_router(prefix="/alerts", tags=["告警"])
 async def list_alerts_api(
     db: DbSession,
     current_user: CurrentUser,
-    subitem_id: int | None = Query(None, description="按子项筛选"),
+    project_id: int | None = Query(None, description="按子项筛选"),
     channel_id: int | None = Query(None, description="按通道筛选"),
     level: AlertLevel | None = Query(None),
     is_resolved: bool | None = Query(None),
@@ -34,15 +34,15 @@ async def list_alerts_api(
     page: int = Query(1, ge=1),
     size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
 ) -> PageSchema[dict]:
-    if subitem_id is not None:
-        await check_subitem_access(db, current_user, subitem_id)
+    if project_id is not None:
+        await check_project_access(db, current_user, project_id)
     elif channel_id is not None:
-        subitem_id = await check_channel_subitem(channel_id)
-        await check_subitem_access(db, current_user, subitem_id)
+        project_id = await check_channel_project(channel_id)
+        await check_project_access(db, current_user, project_id)
 
     rows, total = await alert_service.list_alerts(
         db,
-        subitem_id=subitem_id,
+        project_id=project_id,
         channel_id=channel_id,
         level=level,
         is_resolved=is_resolved,
@@ -63,8 +63,8 @@ async def list_alerts_api(
 async def get_alert_api(alert_id: int, db: DbSession, current_user: CurrentUser) -> dict:
     alert = await alert_service.get_alert(db, alert_id)
     channel = await db.get(Channel, alert.channel_id)
-    subitem_id = await check_channel_subitem(channel.id)
-    await check_subitem_access(db, current_user, subitem_id)
+    project_id = await check_channel_project(channel.id)
+    await check_project_access(db, current_user, project_id)
     return alert_service.to_out_dict(alert)
 
 
@@ -72,7 +72,7 @@ async def get_alert_api(alert_id: int, db: DbSession, current_user: CurrentUser)
 async def acknowledge_alert_api(alert_id: int, db: DbSession, current_user: CurrentUser) -> dict:
     alert = await alert_service.get_alert(db, alert_id)
     channel = await db.get(Channel, alert.channel_id)
-    subitem_id = await check_channel_subitem(channel.id)
-    await check_subitem_admin(db, current_user, subitem_id)
+    project_id = await check_channel_project(channel.id)
+    await check_project_admin(db, current_user, project_id)
     updated = await alert_service.acknowledge_alert(db, alert_id, current_user.id)
     return alert_service.to_out_dict(updated)

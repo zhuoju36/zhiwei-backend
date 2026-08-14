@@ -10,7 +10,7 @@
 PostgreSQL 15 + TimescaleDB 2.x
   │
   ├─ 关系表（标准 PG 表，业务元数据）
-  │    users / subitems / user_subitems / devices / points / sensors / channels /
+  │    users / projects / user_projects / devices / points / sensors / channels /
   │    alerts / analysis_jobs / 3d_models / platform_settings
   │
   └─ 时序表（TimescaleDB hypertable）
@@ -19,37 +19,35 @@ PostgreSQL 15 + TimescaleDB 2.x
 
 关系表通过 SQLAlchemy 2.0 ORM 管理；时序表 schema 由迁移创建、hypertable 与保留策略由 `scripts/init_db.py` 维护。
 
-## 2. 拓扑：user → subitem → device → point → sensor → channel → readings
+## 2. 拓扑：user → project → device → sensor → channel → readings
 
 ```
 user
-└─ subitem（子项）
+└─ project（项目）
    └─ device（采集设备）
-      └─ point（测点 = 物理位置）
-         └─ sensor（传感器 / 仪器）
-            └─ channel（通道：X/Y/Z/温度/...）
-               └─ readings（时序数据）
+      └─ sensor（测点 + 传感器合一：位置字段 + 仪器元数据）
+         └─ channel（通道：X/Y/Z/温度/...）
+            └─ readings（时序数据）
 ```
 
-`point` 从 v0.7 的"一个传感器一个通道"退化为**物理位置**；`unit / sampling_rate / alert_rules` 下沉到 `channel`。
+v0.9 起 `point` 与 `sensor` 合一（实际部署一测点一传感器）：位置（position / sensor_code / sensor_name）与仪器元数据（model / 校准）在同一行；`unit / sampling_rate / alert_rules` 在 `channel`。
 
 ## 3. 关系模型（`app/models/`）
 
 | 表 | 主键 | 说明 |
 |----|------|------|
 | `users` | id | 用户；唯一索引 username / email |
-| `subitems` | id | 子项；FK `users.id(created_by)` |
-| `user_subitems` | (user_id, subitem_id) | 用户-子项授权；复合主键，permission ∈ read/write/admin |
-| `devices` | id | 设备；唯一索引 device_code；FK subitems.id |
-| `points` | id | 测点（位置）；唯一 (device_id, point_code)；JSONB position |
-| `sensors` | id | 传感器；唯一 (point_id, sensor_code)；model / manufacturer / install_date / last_calibration / metadata_ |
+| `projects` | id | 项目（项目）；FK `users.id(created_by)` |
+| `user_projects` | (user_id, project_id) | 用户-项目授权；复合主键，permission ∈ read/write/admin |
+| `devices` | id | 设备；唯一索引 device_code；FK projects.id |
+| `sensors` | id | 传感器（v0.9 合一）；唯一 (device_id, sensor_code)；位置 position / sensor_name + 仪器 model / manufacturer / install_date / last_calibration / metadata_ |
 | `channels` | id | 通道；唯一 (sensor_id, channel_code)；channel_type / unit / sampling_rate / position_offset / axis / alert_rules / is_active |
 | `alerts` | id | 告警；FK channels.id；level / is_resolved / 时间窗 |
 | `analysis_jobs` | id | 分析任务；FK channels.id；plugin / params / status / result_key |
-| `3d_models` | id | 3D 模型；FK subitems.id（一个子项多个模型）；original_key / glb_key / status（v0.8c） |
+| `3d_models` | id | 3D 模型；FK projects.id（一个项目多个模型）；original_key / glb_key / status（v0.8c） |
 | `platform_settings` | id=1 | 平台元数据（单行） |
 
-> v0.8c：`subitems.model_file_key` 列已删除（多模型方案下冗余），模型统一存 `3d_models` 表，GLB 经 `GET /api/v1/models/{id}/file` 下载。
+> v0.8c：`projects.model_file_key` 列已删除（多模型方案下冗余），模型统一存 `3d_models` 表，GLB 经 `GET /api/v1/models/{id}/file` 下载。
 
 ### 告警生命周期（v0.8b）
 
@@ -68,7 +66,7 @@ user
         · UPDATE ended_at=ts, is_resolved=true
   │
   ▼
-新增/关闭的 alert → Redis Pub/Sub subitem:{id} → WebSocket data:alert
+新增/关闭的 alert → Redis Pub/Sub project:{id} → WebSocket data:alert
 ```
 
 每条未恢复告警按 `(channel_id, level)` 唯一。持续触发不重复创建；值回到正常范围自动关闭。v0.5 起支持 `suppress_seconds` 抑制窗口：窗口内再次触发复用最近一条已关闭告警（重开）。
@@ -134,9 +132,12 @@ SELECT add_retention_policy('readings', INTERVAL '7 days', if_not_exists => TRUE
 | `dda0b01608f9` | v0.1 | 初始 8 表 |
 | `6c0943361e16` | v0.4 | analysis_jobs；drop Timescale 自动索引（IF EXISTS） |
 | `7c74c5b67148` | v0.7 | platform_settings |
-| `1e4cdedf9b41` | v0.8a | projects → subitems（术语重命名） |
+| `1e4cdedf9b41` | v0.8a | projects → projects（术语调整，v0.9 回退） |
 | `af5a7548852c` | v0.8b | sensors / channels / readings；drop sensor_raw / sensor_feature；alerts / analysis_jobs 改 channel_id |
-| `c4f21bee2f8b` | v0.8c | 3d_models 表；drop subitems.model_file_key |
+| `c4f21bee2f8b` | v0.8c | 3d_models 表；drop projects.model_file_key |
+| `0c8f4e8484f3` | v0.9 | **重置重构**：point 并入 sensor（sensors 挂 device 下）；subitem → project（projects / user_projects）；全部业务表重建 |
+| `af5a7548852c` | v0.8b | sensors / channels / readings；drop sensor_raw / sensor_feature；alerts / analysis_jobs 改 channel_id |
+| `c4f21bee2f8b` | v0.8c | 3d_models 表；drop projects.model_file_key |
 
 ## 6. 写入热路径（`app/services/data_service.py`）
 
@@ -154,12 +155,12 @@ async def batch_ingest(readings: list[ReadingIn]) -> int:
             records=records,
             columns=["time", "channel_id", "value", "quality", "metadata"],
         )
-    await _publish_realtime(accepted)  # Redis SET + PUBLISH subitem:{id}
+    await _publish_realtime(accepted)  # Redis SET + PUBLISH project:{id}
     await _dispatch_alert_check(accepted)  # Celery alerts 队列
 ```
 
 要点：
-- 编码映射 JOIN 链变长（4 表），但仍一次查询；单测点 1 万条写入 < 3s
+- 编码映射 JOIN 链（device → sensor → channel，3 表）仍一次查询；单通道 1 万条写入 < 3s
 - `channel_code` 全局唯一可定位（`devices.device_code` + `channels.channel_code`）
 
 ## 7. 查询路由

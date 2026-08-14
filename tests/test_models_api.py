@@ -7,7 +7,7 @@ from httpx import AsyncClient
 
 from app.database import AsyncSessionLocal
 from app.models.model import Model
-from app.models.subitem import Subitem
+from app.models.project import Project
 from tests.conftest import login_headers
 
 # 三角形立方体（8 顶点 / 12 面），trimesh 可直接加载
@@ -34,18 +34,18 @@ f 4 5 1
 """
 
 
-async def _create_subitem() -> int:
+async def _create_project() -> int:
     async with AsyncSessionLocal() as db:
-        sub = Subitem(name=f"model-test-{uuid.uuid4().hex[:8]}")
+        sub = Project(name=f"model-test-{uuid.uuid4().hex[:8]}")
         db.add(sub)
         await db.commit()
         await db.refresh(sub)
         return sub.id
 
 
-async def _upload(client: AsyncClient, headers: dict, subitem_id: int, filename: str, data: bytes):
+async def _upload(client: AsyncClient, headers: dict, project_id: int, filename: str, data: bytes):
     return await client.post(
-        f"/api/v1/models/{subitem_id}/upload",
+        f"/api/v1/models/{project_id}/upload",
         files={"file": (filename, data, "application/octet-stream")},
         headers=headers,
     )
@@ -54,9 +54,9 @@ async def _upload(client: AsyncClient, headers: dict, subitem_id: int, filename:
 @pytest.mark.asyncio
 async def test_upload_obj_converts_to_glb(client: AsyncClient, admin_user: dict) -> None:
     headers = await login_headers(client, admin_user["username"], admin_user["password"])
-    subitem_id = await _create_subitem()
+    project_id = await _create_project()
 
-    resp = await _upload(client, headers, subitem_id, "cube.obj", CUBE_OBJ)
+    resp = await _upload(client, headers, project_id, "cube.obj", CUBE_OBJ)
     assert resp.status_code == 201, resp.text
     model_id = resp.json()["data"]["model_id"]
 
@@ -77,15 +77,15 @@ async def test_upload_obj_converts_to_glb(client: AsyncClient, admin_user: dict)
 
 
 @pytest.mark.asyncio
-async def test_subitem_multiple_models(client: AsyncClient, admin_user: dict) -> None:
+async def test_project_multiple_models(client: AsyncClient, admin_user: dict) -> None:
     headers = await login_headers(client, admin_user["username"], admin_user["password"])
-    subitem_id = await _create_subitem()
+    project_id = await _create_project()
 
     for name in ("a.obj", "b.obj"):
-        resp = await _upload(client, headers, subitem_id, name, CUBE_OBJ)
+        resp = await _upload(client, headers, project_id, name, CUBE_OBJ)
         assert resp.status_code == 201, resp.text
 
-    resp = await client.get(f"/api/v1/models?subitem_id={subitem_id}", headers=headers)
+    resp = await client.get(f"/api/v1/models?project_id={project_id}", headers=headers)
     assert resp.status_code == 200
     page = resp.json()["data"]
     assert page["total"] == 2
@@ -96,9 +96,9 @@ async def test_subitem_multiple_models(client: AsyncClient, admin_user: dict) ->
 @pytest.mark.asyncio
 async def test_upload_ifc_rejected(client: AsyncClient, admin_user: dict) -> None:
     headers = await login_headers(client, admin_user["username"], admin_user["password"])
-    subitem_id = await _create_subitem()
+    project_id = await _create_project()
 
-    resp = await _upload(client, headers, subitem_id, "model.ifc", b"ISO-10303-21;")
+    resp = await _upload(client, headers, project_id, "model.ifc", b"ISO-10303-21;")
     assert resp.status_code == 400
     assert resp.json()["code"] == "MODEL_FORMAT_UNSUPPORTED"
 
@@ -109,7 +109,7 @@ async def test_upload_forbidden_for_unlinked_user(client: AsyncClient) -> None:
     from app.core.security import hash_password
     from app.models.user import User
 
-    subitem_id = await _create_subitem()
+    project_id = await _create_project()
 
     # 普通用户（无任何子项授权）
     name = f"u_{uuid.uuid4().hex[:8]}"
@@ -129,7 +129,7 @@ async def test_upload_forbidden_for_unlinked_user(client: AsyncClient) -> None:
             data={"username": name, "password": "user12345"},
         )
         user_headers = {"Authorization": f"Bearer {login.json()['data']['access_token']}"}
-        resp = await _upload(client, user_headers, subitem_id, "cube.obj", CUBE_OBJ)
+        resp = await _upload(client, user_headers, project_id, "cube.obj", CUBE_OBJ)
         assert resp.status_code == 403, resp.text
     finally:
         async with AsyncSessionLocal() as db:
@@ -140,11 +140,11 @@ async def test_upload_forbidden_for_unlinked_user(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_download_not_ready(client: AsyncClient, admin_user: dict) -> None:
     headers = await login_headers(client, admin_user["username"], admin_user["password"])
-    subitem_id = await _create_subitem()
+    project_id = await _create_project()
     async with AsyncSessionLocal() as db:
         m = Model(
-            subitem_id=subitem_id,
-            original_key=f"models/{subitem_id}/x.obj",
+            project_id=project_id,
+            original_key=f"models/{project_id}/x.obj",
             original_name="x.obj",
             source_format="obj",
             status="pending",
@@ -162,15 +162,15 @@ async def test_download_not_ready(client: AsyncClient, admin_user: dict) -> None
 @pytest.mark.asyncio
 async def test_delete_model(client: AsyncClient, admin_user: dict) -> None:
     headers = await login_headers(client, admin_user["username"], admin_user["password"])
-    subitem_id = await _create_subitem()
+    project_id = await _create_project()
 
-    resp = await _upload(client, headers, subitem_id, "cube.obj", CUBE_OBJ)
+    resp = await _upload(client, headers, project_id, "cube.obj", CUBE_OBJ)
     model_id = resp.json()["data"]["model_id"]
 
     resp = await client.delete(f"/api/v1/models/{model_id}", headers=headers)
     assert resp.status_code == 204
 
-    resp = await client.get(f"/api/v1/models?subitem_id={subitem_id}", headers=headers)
+    resp = await client.get(f"/api/v1/models?project_id={project_id}", headers=headers)
     assert resp.json()["data"]["total"] == 0
 
     resp = await client.delete(f"/api/v1/models/{model_id}", headers=headers)
@@ -180,8 +180,8 @@ async def test_delete_model(client: AsyncClient, admin_user: dict) -> None:
 @pytest.mark.asyncio
 async def test_delete_requires_admin(client: AsyncClient, admin_user: dict) -> None:
     headers = await login_headers(client, admin_user["username"], admin_user["password"])
-    subitem_id = await _create_subitem()
-    resp = await _upload(client, headers, subitem_id, "cube.obj", CUBE_OBJ)
+    project_id = await _create_project()
+    resp = await _upload(client, headers, project_id, "cube.obj", CUBE_OBJ)
     model_id = resp.json()["data"]["model_id"]
 
     # 无 token -> 401

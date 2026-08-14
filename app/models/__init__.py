@@ -7,10 +7,9 @@ from app.models.channel import Channel
 from app.models.device import Device
 from app.models.model import Model
 from app.models.platform import PlatformSettings
-from app.models.point import Point
+from app.models.project import Project, UserProject
 from app.models.reading import Reading
 from app.models.sensor import Sensor
-from app.models.subitem import Subitem, UserSubitem
 from app.models.user import User
 
 __all__ = [
@@ -21,10 +20,9 @@ __all__ = [
     "Device",
     "Model",
     "PlatformSettings",
-    "Point",
+    "Project",
     "Reading",
     "Sensor",
-    "Subitem",
     "User",
-    "UserSubitem",
+    "UserProject",
 ]

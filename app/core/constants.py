@@ -8,8 +8,8 @@ class Role(StrEnum):
     USER = "user"
 
 
-class SubitemPermission(StrEnum):
-    """子项级权限（user_subitems 表的 permission 字段）。"""
+class ProjectPermission(StrEnum):
+    """项目级权限（user_projects 表的 permission 字段）。"""
 
     READ = "read"
     WRITE = "write"

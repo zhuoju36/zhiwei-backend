@@ -11,7 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
-    from app.models.subitem import UserSubitem
+    from app.models.project import UserProject
 
 
 class User(Base):
@@ -25,6 +25,6 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    subitem_links: Mapped[list[UserSubitem]] = relationship(
+    project_links: Mapped[list[UserProject]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

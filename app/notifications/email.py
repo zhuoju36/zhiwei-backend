@@ -28,7 +28,7 @@ def _build_html(payload: dict[str, Any]) -> str:
         </tr>
         <tr>
           <td style="padding: 4px 12px; color: #666;">子项</td>
-          <td style="padding: 4px 12px;">{payload.get("subitem_id")}</td>
+          <td style="padding: 4px 12px;">{payload.get("project_id")}</td>
         </tr>
         <tr>
           <td style="padding: 4px 12px; color: #666;">设备 / 通道</td>

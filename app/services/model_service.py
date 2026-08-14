@@ -16,14 +16,14 @@ class ModelService:
     @staticmethod
     async def create(
         db: AsyncSession,
-        subitem_id: int,
+        project_id: int,
         original_key: str,
         original_name: str,
         source_format: str,
         user_id: int | None = None,
     ) -> Model:
         model = Model(
-            subitem_id=subitem_id,
+            project_id=project_id,
             original_key=original_key,
             original_name=original_name,
             source_format=source_format,
@@ -42,19 +42,19 @@ class ModelService:
         return model
 
     @staticmethod
-    async def list_by_subitem(
-        db: AsyncSession, subitem_id: int, page: int, size: int
+    async def list_by_project(
+        db: AsyncSession, project_id: int, page: int, size: int
     ) -> tuple[list[Model], int]:
         total = (
             await db.execute(
-                select(func.count()).select_from(Model).where(Model.subitem_id == subitem_id)
+                select(func.count()).select_from(Model).where(Model.project_id == project_id)
             )
         ).scalar_one()
         rows = (
             (
                 await db.execute(
                     select(Model)
-                    .where(Model.subitem_id == subitem_id)
+                    .where(Model.project_id == project_id)
                     .order_by(Model.created_at.desc(), Model.id.desc())
                     .offset((page - 1) * size)
                     .limit(size)

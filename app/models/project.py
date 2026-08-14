@@ -1,7 +1,7 @@
-"""子项（监测范围）与用户-子项授权关联模型。
+"""项目（监测范围）与用户-项目授权关联模型。
 
-v0.8a 重命名：原 `projects` / `user_projects` 改名为 `subitems` /
-`user_subitems`，列名 `project_id` 改 `subitem_id`。Schema 物理结构不变。
+v0.9 术语回退：原 `projects` / `user_projects` 改回 `projects` / `user_projects`，
+列名 `project_id` 改 `project_id`。
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
-class Subitem(Base):
-    __tablename__ = "subitems"
+class Project(Base):
+    __tablename__ = "projects"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -30,24 +30,24 @@ class Subitem(Base):
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    user_links: Mapped[list[UserSubitem]] = relationship(
-        back_populates="subitem", cascade="all, delete-orphan"
+    user_links: Mapped[list[UserProject]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
     )
-    devices: Mapped[list[Device]] = relationship(back_populates="subitem")
+    devices: Mapped[list[Device]] = relationship(back_populates="project")
 
 
-class UserSubitem(Base):
-    """用户-子项多对多关联，控制数据权限。"""
+class UserProject(Base):
+    """用户-项目多对多关联，控制数据权限。"""
 
-    __tablename__ = "user_subitems"
+    __tablename__ = "user_projects"
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    subitem_id: Mapped[int] = mapped_column(
-        ForeignKey("subitems.id", ondelete="CASCADE"), primary_key=True
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
     )
     permission: Mapped[str] = mapped_column(String(16), default="read", server_default="read")
 
-    user: Mapped[User] = relationship(back_populates="subitem_links")
-    subitem: Mapped[Subitem] = relationship(back_populates="user_links")
+    user: Mapped[User] = relationship(back_populates="project_links")
+    project: Mapped[Project] = relationship(back_populates="user_links")

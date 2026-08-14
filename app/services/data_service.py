@@ -60,16 +60,15 @@ async def _resolve_code_map(
 ) -> dict[tuple[str, str], tuple[int, int, int]]:
     """批量将 (device_code, channel_code) 映射为 (channel_id, project_id)。
 
-    返回：{(device_code, channel_code): (channel_id, subitem_id)}
+    返回：{(device_code, channel_code): (channel_id, project_id)}
     """
     device_codes = list({r.device_code for r in readings})
     rows = await conn.fetch(
         """
-        SELECT d.id AS device_id, d.device_code, d.subitem_id,
+        SELECT d.id AS device_id, d.device_code, d.project_id,
                c.id AS channel_id, c.channel_code
         FROM devices d
-        JOIN points p ON p.device_id = d.id
-        JOIN sensors s ON s.point_id = p.id
+        JOIN sensors s ON s.device_id = d.id
         JOIN channels c ON c.sensor_id = s.id
         WHERE d.device_code = ANY($1)
         """,
@@ -78,7 +77,7 @@ async def _resolve_code_map(
     return {
         (row["device_code"], row["channel_code"]): (
             row["channel_id"],
-            row["subitem_id"],
+            row["project_id"],
         )
         for row in rows
     }
@@ -99,16 +98,16 @@ async def batch_ingest(readings: list[ReadingIn]) -> int:
         code_map = await _resolve_code_map(conn, readings)
 
         records = []
-        accepted: list[tuple[ReadingIn, int, int]] = []  # (reading, channel_id, subitem_id)
+        accepted: list[tuple[ReadingIn, int, int]] = []  # (reading, channel_id, project_id)
         skipped = 0
         for r in readings:
             ids = code_map.get((r.device_code, r.channel_code))
             if ids is None:
                 skipped += 1
                 continue
-            channel_id, subitem_id = ids
+            channel_id, project_id = ids
             records.append((r.timestamp, channel_id, r.value, r.quality.value, json.dumps(r.extra)))
-            accepted.append((r, channel_id, subitem_id))
+            accepted.append((r, channel_id, project_id))
 
         if skipped:
             logger.warning("批量接入丢弃 %d 条未知编码读数", skipped)
@@ -131,7 +130,7 @@ async def _publish_realtime(accepted: list[tuple[ReadingIn, int, int]]) -> None:
     try:
         rds = await get_redis()
         async with rds.pipeline(transaction=False) as pipe:
-            for r, channel_id, subitem_id in accepted:
+            for r, channel_id, project_id in accepted:
                 payload = {
                     "type": "data:realtime",
                     "payload": {
@@ -145,7 +144,7 @@ async def _publish_realtime(accepted: list[tuple[ReadingIn, int, int]]) -> None:
                     },
                 }
                 pipe.set(f"latest:{channel_id}", json.dumps(payload["payload"]))
-                pipe.publish(f"subitem:{subitem_id}", json.dumps(payload))
+                pipe.publish(f"project:{project_id}", json.dumps(payload))
             await pipe.execute()
     except Exception:
         # 推送失败不影响写入主流程
@@ -159,14 +158,14 @@ async def _dispatch_alert_check(accepted: list[tuple[ReadingIn, int, int]]) -> N
     payload = [
         {
             "channel_id": channel_id,
-            "subitem_id": subitem_id,
+            "project_id": project_id,
             "device_code": r.device_code,
             "channel_code": r.channel_code,
             "value": r.value,
             "timestamp": r.timestamp.isoformat(),
             "quality": r.quality.value,
         }
-        for r, channel_id, subitem_id in accepted
+        for r, channel_id, project_id in accepted
     ]
     try:
         # 延迟导入避免循环依赖（alert_tasks 间接依赖 data_service.get_redis）
@@ -205,21 +204,20 @@ async def query_timeseries(
     return [TimeSeriesPoint(ts=row["ts"], value=row["value"]) for row in rows]
 
 
-async def check_channel_subitem(channel_id: int) -> int:
+async def check_channel_project(channel_id: int) -> int:
     """返回通道所属子项 ID，用于路由层权限校验。"""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        subitem_id = await conn.fetchval(
+        project_id = await conn.fetchval(
             """
-            SELECT d.subitem_id
+            SELECT d.project_id
             FROM channels c
             JOIN sensors s ON s.id = c.sensor_id
-            JOIN points p ON p.id = s.point_id
-            JOIN devices d ON d.id = p.device_id
+            JOIN devices d ON d.id = s.device_id
             WHERE c.id = $1
             """,
             channel_id,
         )
-    if subitem_id is None:
+    if project_id is None:
         raise BizException(code="CHANNEL_NOT_FOUND", message="通道不存在", status_code=404)
-    return subitem_id
+    return project_id

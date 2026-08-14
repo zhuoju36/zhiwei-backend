@@ -1,4 +1,4 @@
-"""告警 API 集成测试（v0.8b：channel_id 替代 point_id）。"""
+"""告警 API 集成测试。"""
 
 import uuid
 from datetime import UTC, datetime
@@ -10,9 +10,8 @@ from app.database import AsyncSessionLocal
 from app.models.alert import Alert
 from app.models.channel import Channel
 from app.models.device import Device
-from app.models.point import Point
+from app.models.project import Project
 from app.models.sensor import Sensor
-from app.models.subitem import Subitem
 from app.services.alert_service import (
     TriggerEvent,
     trigger_alert,
@@ -23,24 +22,22 @@ from tests.conftest import login_headers
 async def _make_channel_with_alert_rules(
     rules: list[dict] | None = None,
 ) -> tuple[int, int, int]:
-    """创建 subitem → device → point → sensor → channel 链路，并设置 channel 的 alert_rules。"""
+    """创建 project → device → sensor → channel 链路，并设置 channel 的 alert_rules。"""
     s = uuid.uuid4().hex[:8]
     async with AsyncSessionLocal() as db:
-        proj = Subitem(name=f"alert-test-{s}")
+        proj = Project(name=f"alert-test-{s}")
         db.add(proj)
         await db.flush()
         device = Device(
-            subitem_id=proj.id,
+            project_id=proj.id,
             device_code=f"GW-{s}",
             protocol="http_json",
             config={},
         )
         db.add(device)
         await db.flush()
-        point = Point(device_id=device.id, point_code=f"P-{s}")
-        db.add(point)
         await db.flush()
-        sensor = Sensor(point_id=point.id, sensor_code=f"S-{s}")
+        sensor = Sensor(device_id=device.id, sensor_code=f"S-{s}")
         db.add(sensor)
         await db.flush()
         channel = Channel(
@@ -61,19 +58,9 @@ async def _cleanup_channel(proj_id: int, dev_id: int, ch_id: int) -> None:
     async with AsyncSessionLocal() as db:
         await db.execute(delete(Alert).where(Alert.channel_id == ch_id))
         await db.execute(delete(Channel).where(Channel.id == ch_id))
-        await db.execute(
-            delete(Sensor).where(
-                Sensor.point_id.in_(
-                    __import__("sqlalchemy")
-                    .select(Point.id)
-                    .where(Point.device_id == dev_id)
-                    .scalar_subquery()
-                )
-            )
-        )
-        await db.execute(delete(Point).where(Point.device_id == dev_id))
+        await db.execute(delete(Sensor).where(Sensor.device_id == dev_id))
         await db.execute(delete(Device).where(Device.id == dev_id))
-        await db.execute(delete(Subitem).where(Subitem.id == proj_id))
+        await db.execute(delete(Project).where(Project.id == proj_id))
         await db.commit()
 
 
@@ -182,7 +169,7 @@ async def test_alerts_list_requires_filter(client: AsyncClient, admin_user: dict
 
 
 async def test_dashboard_stats(client: AsyncClient, admin_user: dict) -> None:
-    subitem_id, _, cid = await _make_channel_with_alert_rules(
+    project_id, _, cid = await _make_channel_with_alert_rules(
         [{"operator": "gt", "threshold": 5, "level": "danger", "suppress_seconds": 0}]
     )
     try:
@@ -198,7 +185,7 @@ async def test_dashboard_stats(client: AsyncClient, admin_user: dict) -> None:
             await db.commit()
 
         headers = await login_headers(client, admin_user["username"], admin_user["password"])
-        resp = await client.get(f"/api/v1/dashboard/stats?subitem_id={subitem_id}", headers=headers)
+        resp = await client.get(f"/api/v1/dashboard/stats?project_id={project_id}", headers=headers)
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data["active_alerts"] >= 1
@@ -206,7 +193,7 @@ async def test_dashboard_stats(client: AsyncClient, admin_user: dict) -> None:
         assert "by_level" in data
 
         resp = await client.get(
-            f"/api/v1/dashboard/recent-alerts?subitem_id={subitem_id}&limit=5",
+            f"/api/v1/dashboard/recent-alerts?project_id={project_id}&limit=5",
             headers=headers,
         )
         assert resp.status_code == 200

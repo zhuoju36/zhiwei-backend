@@ -21,8 +21,8 @@ async def _wipe_users() -> None:
         # TRUNCATE CASCADE 一次性清空（绕过 FK 依赖）
         await db.execute(
             text(
-                "TRUNCATE TABLE alerts, analysis_jobs, points, devices, "
-                "user_subitems, subitems, users RESTART IDENTITY CASCADE"
+                "TRUNCATE TABLE alerts, analysis_jobs, sensors, devices, "
+                "user_projects, projects, users RESTART IDENTITY CASCADE"
             )
         )
         await db.commit()

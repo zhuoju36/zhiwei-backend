@@ -12,7 +12,6 @@ from app.core.exceptions import BizException
 from app.models.alert import Alert
 from app.models.channel import Channel
 from app.models.device import Device
-from app.models.point import Point
 from app.models.sensor import Sensor
 
 logger = logging.getLogger(__name__)
@@ -174,7 +173,7 @@ async def close_open_alerts(
 async def list_alerts(
     db: AsyncSession,
     *,
-    subitem_id: int | None = None,
+    project_id: int | None = None,
     channel_id: int | None = None,
     level: str | None = None,
     is_resolved: bool | None = None,
@@ -186,23 +185,21 @@ async def list_alerts(
     stmt = select(Alert)
     count_stmt = select(func.count()).select_from(Alert)
 
-    if subitem_id is not None:
+    if project_id is not None:
         stmt = (
             select(Alert)
             .join(Channel, Channel.id == Alert.channel_id)
             .join(Sensor, Sensor.id == Channel.sensor_id)
-            .join(Point, Point.id == Sensor.point_id)
-            .join(Device, Device.id == Point.device_id)
-            .where(Device.subitem_id == subitem_id)
+            .join(Device, Device.id == Sensor.device_id)
+            .where(Device.project_id == project_id)
         )
         count_stmt = (
             select(func.count())
             .select_from(Alert)
             .join(Channel, Channel.id == Alert.channel_id)
             .join(Sensor, Sensor.id == Channel.sensor_id)
-            .join(Point, Point.id == Sensor.point_id)
-            .join(Device, Device.id == Point.device_id)
-            .where(Device.subitem_id == subitem_id)
+            .join(Device, Device.id == Sensor.device_id)
+            .where(Device.project_id == project_id)
         )
 
     if channel_id is not None:

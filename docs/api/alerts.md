@@ -33,22 +33,22 @@
 
 ## 权限
 
-| 操作 | admin | 子项 admin | 子项 write / read | 其他 |
+| 操作 | admin | 项目 admin | 项目 write / read | 其他 |
 |------|-------|-----------|-------------------|------|
-| `GET /alerts`（列表/详情） | ✓ | ✓ | ✓（限可见子项） | ✗ |
+| `GET /alerts`（列表/详情） | ✓ | ✓ | ✓（限可见项目） | ✗ |
 | `POST /alerts/{id}/acknowledge` | ✓ | ✓ | ✗ | ✗ |
 
 ---
 
 ## GET /api/v1/alerts
 
-分页列出告警。**至少传一个过滤条件**（`subitem_id` 或 `channel_id`），避免全表扫描；admin 不带过滤也会查询全量（用于大屏）。
+分页列出告警。**至少传一个过滤条件**（`project_id` 或 `channel_id`），避免全表扫描；admin 不带过滤也会查询全量（用于大屏）。
 
 ### Query
 
 | 参数 | 类型 | 默认 | 说明 |
 |------|------|------|------|
-| `subitem_id` | int | — | 按子项 |
+| `project_id` | int | — | 按项目 |
 | `channel_id` | int | — | 按通道 |
 | `level` | enum | — | `info` / `warning` / `danger` |
 | `is_resolved` | bool | — | 活跃 / 已恢复 |
@@ -88,7 +88,7 @@
 
 | HTTP | code | 说明 |
 |------|------|------|
-| 403 | `FORBIDDEN` | 未被授权访问所属子项 |
+| 403 | `FORBIDDEN` | 未被授权访问所属项目 |
 | 404 | `CHANNEL_NOT_FOUND` | `channel_id` 不存在 |
 
 ---
@@ -124,7 +124,7 @@
 
 | HTTP | code | 说明 |
 |------|------|------|
-| 403 | `FORBIDDEN` | 非子项管理员 |
+| 403 | `FORBIDDEN` | 非项目管理员 |
 | 404 | `ALERT_NOT_FOUND` | 告警不存在 |
 | 409 | `ALERT_ALREADY_RESOLVED` | 告警已确认 |
 
@@ -132,7 +132,7 @@
 
 ## WebSocket 实时事件
 
-告警创建 / 关闭时会向 `subitem:{subitem_id}` 频道广播：
+告警创建 / 关闭时会向 `project:{project_id}` 频道广播：
 
 ```json
 {
@@ -162,10 +162,10 @@
 ## curl 示例
 
 ```bash
-# 按子项列出活跃告警
+# 按项目列出活跃告警
 curl -G http://localhost:8000/api/v1/alerts \
     -H "Authorization: Bearer $TOKEN" \
-    --data-urlencode "subitem_id=1" \
+    --data-urlencode "project_id=1" \
     --data-urlencode "is_resolved=false"
 
 # 确认告警

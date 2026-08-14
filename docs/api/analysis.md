@@ -33,11 +33,11 @@
 
 ## 权限
 
-| 操作 | admin | 子项 write | 子项 read | 其他 |
+| 操作 | admin | 项目 write | 项目 read | 其他 |
 |------|-------|-----------|-----------|------|
 | `GET /analysis/plugins`（插件列表） | ✓ | ✓ | ✓ | ✗ |
 | `POST /analysis/jobs`（提交） | ✓ | ✓ | ✗ | ✗ |
-| `GET /analysis/jobs`（列表） | ✓ | ✓（限可见子项） | ✓ | ✗ |
+| `GET /analysis/jobs`（列表） | ✓ | ✓（限可见项目） | ✓ | ✗ |
 | `GET /analysis/jobs/{id}`（详情） | ✓ | ✓ | ✓ | ✗ |
 | `GET /analysis/jobs/{id}/result`（下载附件） | ✓ | ✓ | ✓ | ✗ |
 
@@ -87,7 +87,7 @@
 | `channel_id` | 是 | 目标通道 ID |
 | `plugin` | 是 | 已注册插件名（v0.8d: `fft` / `statistics`） |
 | `params` | 否 | 插件参数（各插件 `params_schema` 见 `/analysis/plugins`） |
-| `params.channel_ids` | 多通道插件必填 | 参与分析的通道列表（须同一子项，数量 = 插件 `input_channels`） |
+| `params.channel_ids` | 多通道插件必填 | 参与分析的通道列表（须同一项目，数量 = 插件 `input_channels`） |
 | `params.start` / `params.end` | 否 | ISO8601 时间窗；省略则用全量数据 |
 
 ### 响应 201
@@ -104,7 +104,7 @@
 
 | HTTP | code | 说明 |
 |------|------|------|
-| 403 | `FORBIDDEN` | 无子项写权限 |
+| 403 | `FORBIDDEN` | 无项目写权限 |
 | 404 | `POINT_NOT_FOUND` | 通道不存在 |
 | 422 | `PLUGIN_NOT_REGISTERED` | plugin 不在 `AnalyzerRegistry` 内 |
 

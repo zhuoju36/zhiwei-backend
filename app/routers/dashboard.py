@@ -5,29 +5,27 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 
 from app.core.middleware import create_router
-from app.dependencies import CurrentUser, DbSession, check_subitem_access
+from app.dependencies import CurrentUser, DbSession, check_project_access
 from app.models.alert import Alert
 from app.models.channel import Channel
 from app.models.device import Device
-from app.models.point import Point
 from app.models.sensor import Sensor
 from app.services.alert_service import to_out_dict
 
 router = create_router(prefix="/dashboard", tags=["大屏"])
 
 
-def _subitem_alert_select(subitem_id: int):
-    """返回按 subitem_id 过滤的 Alert 查询（带完整 JOIN 链）。
+def _project_alert_select(project_id: int):
+    """返回按 project_id 过滤的 Alert 查询（带完整 JOIN 链）。
 
-    注意：JOIN 链是 Alert → Channel → Sensor → Point → Device。
+    注意：JOIN 链是 Alert → Channel → Sensor → Device。
     """
     return (
         select(Alert)
         .join(Channel, Channel.id == Alert.channel_id)
         .join(Sensor, Sensor.id == Channel.sensor_id)
-        .join(Point, Point.id == Sensor.point_id)
-        .join(Device, Device.id == Point.device_id)
-        .where(Device.subitem_id == subitem_id)
+        .join(Device, Device.id == Sensor.device_id)
+        .where(Device.project_id == project_id)
     )
 
 
@@ -35,11 +33,11 @@ def _subitem_alert_select(subitem_id: int):
 async def get_stats(
     db: DbSession,
     current_user: CurrentUser,
-    subitem_id: int | None = None,
+    project_id: int | None = None,
 ) -> dict:
     """聚合统计：活跃告警、近 24h 告警、按级别分布。"""
-    if subitem_id is not None:
-        await check_subitem_access(db, current_user, subitem_id)
+    if project_id is not None:
+        await check_project_access(db, current_user, project_id)
 
     count_active = select(func.count()).select_from(Alert).where(Alert.is_resolved.is_(False))
     count_24h = (
@@ -52,8 +50,8 @@ async def get_stats(
     )
     recent_stmt = select(Alert).order_by(Alert.started_at.desc()).limit(10)
 
-    if subitem_id is not None:
-        sub = _subitem_alert_select(subitem_id).subquery()
+    if project_id is not None:
+        sub = _project_alert_select(project_id).subquery()
         count_active = select(func.count()).select_from(sub).where(sub.c.is_resolved.is_(False))
         count_24h = (
             select(func.count())
@@ -69,9 +67,8 @@ async def get_stats(
             select(Alert)
             .join(Channel, Channel.id == Alert.channel_id)
             .join(Sensor, Sensor.id == Channel.sensor_id)
-            .join(Point, Point.id == Sensor.point_id)
-            .join(Device, Device.id == Point.device_id)
-            .where(Device.subitem_id == subitem_id)
+            .join(Device, Device.id == Sensor.device_id)
+            .where(Device.project_id == project_id)
             .order_by(Alert.started_at.desc())
             .limit(10)
         )
@@ -87,7 +84,7 @@ async def get_stats(
         "alerts_24h": last24,
         "by_level": by_level,
         "recent_alerts": [to_out_dict(a) for a in recent_rows],
-        "subitem_id": subitem_id,
+        "project_id": project_id,
     }
 
 
@@ -95,21 +92,20 @@ async def get_stats(
 async def recent_alerts(
     db: DbSession,
     current_user: CurrentUser,
-    subitem_id: int | None = None,
+    project_id: int | None = None,
     limit: int = 10,
 ) -> list[dict]:
     """最近 N 条告警（不论已恢复/未恢复）。"""
-    if subitem_id is not None:
-        await check_subitem_access(db, current_user, subitem_id)
+    if project_id is not None:
+        await check_project_access(db, current_user, project_id)
     stmt = select(Alert).order_by(Alert.started_at.desc()).limit(limit)
-    if subitem_id is not None:
+    if project_id is not None:
         stmt = (
             select(Alert)
             .join(Channel, Channel.id == Alert.channel_id)
             .join(Sensor, Sensor.id == Channel.sensor_id)
-            .join(Point, Point.id == Sensor.point_id)
-            .join(Device, Device.id == Point.device_id)
-            .where(Device.subitem_id == subitem_id)
+            .join(Device, Device.id == Sensor.device_id)
+            .where(Device.project_id == project_id)
             .order_by(Alert.started_at.desc())
             .limit(limit)
         )

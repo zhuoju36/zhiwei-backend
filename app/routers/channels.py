@@ -8,11 +8,10 @@ from app.dependencies import (
     AdminUser,
     CurrentUser,
     DbSession,
-    check_subitem_access,
-    check_subitem_write_access,
+    check_project_access,
+    check_project_write_access,
 )
 from app.models.device import Device
-from app.models.point import Point
 from app.models.sensor import Sensor
 from app.schemas.base import PageSchema
 from app.schemas.sensor import ChannelCreate, ChannelOut, ChannelUpdate
@@ -31,9 +30,8 @@ async def list_channels(
     size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
 ) -> PageSchema[ChannelOut]:
     sensor = await SensorService.get(db, sensor_id)
-    point = await db.get(Point, sensor.point_id)
-    device = await db.get(Device, point.device_id)
-    await check_subitem_access(db, current_user, device.subitem_id)
+    device = await db.get(Device, sensor.device_id)
+    await check_project_access(db, current_user, device.project_id)
     rows, total = await ChannelService.list_by_sensor(db, sensor_id, page, size)
     return PageSchema(
         total=total,
@@ -48,9 +46,8 @@ async def create_channel(
     payload: ChannelCreate, db: DbSession, current_user: CurrentUser
 ) -> ChannelOut:
     sensor = await SensorService.get(db, payload.sensor_id)
-    point = await db.get(Point, sensor.point_id)
-    device = await db.get(Device, point.device_id)
-    await check_subitem_write_access(db, current_user, device.subitem_id)
+    device = await db.get(Device, sensor.device_id)
+    await check_project_write_access(db, current_user, device.project_id)
     channel = await ChannelService.create(db, payload)
     return ChannelOut.model_validate(channel)
 
@@ -59,9 +56,8 @@ async def create_channel(
 async def get_channel(channel_id: int, db: DbSession, current_user: CurrentUser) -> ChannelOut:
     channel = await ChannelService.get(db, channel_id)
     sensor = await db.get(Sensor, channel.sensor_id)
-    point = await db.get(Point, sensor.point_id)
-    device = await db.get(Device, point.device_id)
-    await check_subitem_access(db, current_user, device.subitem_id)
+    device = await db.get(Device, sensor.device_id)
+    await check_project_access(db, current_user, device.project_id)
     return ChannelOut.model_validate(channel)
 
 
@@ -74,9 +70,8 @@ async def update_channel(
 ) -> ChannelOut:
     channel = await ChannelService.get(db, channel_id)
     sensor = await db.get(Sensor, channel.sensor_id)
-    point = await db.get(Point, sensor.point_id)
-    device = await db.get(Device, point.device_id)
-    await check_subitem_write_access(db, current_user, device.subitem_id)
+    device = await db.get(Device, sensor.device_id)
+    await check_project_write_access(db, current_user, device.project_id)
     updated = await ChannelService.update(db, channel_id, payload)
     return ChannelOut.model_validate(updated)
 

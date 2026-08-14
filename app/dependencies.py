@@ -64,48 +64,48 @@ async def verify_api_key(x_api_key: Annotated[str | None, Header()] = None) -> s
     return x_api_key
 
 
-async def check_subitem_access(db: AsyncSession, user: User, subitem_id: int) -> None:
+async def check_project_access(db: AsyncSession, user: User, project_id: int) -> None:
     """校验用户是否有指定子项的访问权限（admin 放行）。"""
     if user.role == Role.ADMIN:
         return
-    from app.models.subitem import UserSubitem
+    from app.models.project import UserProject
 
-    stmt = select(UserSubitem).where(
-        UserSubitem.user_id == user.id, UserSubitem.subitem_id == subitem_id
+    stmt = select(UserProject).where(
+        UserProject.user_id == user.id, UserProject.project_id == project_id
     )
     result = await db.execute(stmt)
     if result.scalar_one_or_none() is None:
         raise BizException(code="FORBIDDEN", message="无权访问该子项", status_code=403)
 
 
-async def check_subitem_write_access(db: AsyncSession, user: User, subitem_id: int) -> None:
+async def check_project_write_access(db: AsyncSession, user: User, project_id: int) -> None:
     """校验用户是否有子项写权限（admin 全局；子项成员需 permission in {write, admin}）。"""
     if user.role == Role.ADMIN:
         return
-    from app.core.constants import SubitemPermission
-    from app.models.subitem import UserSubitem
+    from app.core.constants import ProjectPermission
+    from app.models.project import UserProject
 
-    stmt = select(UserSubitem.permission).where(
-        UserSubitem.user_id == user.id, UserSubitem.subitem_id == subitem_id
+    stmt = select(UserProject.permission).where(
+        UserProject.user_id == user.id, UserProject.project_id == project_id
     )
     permission = (await db.execute(stmt)).scalar_one_or_none()
     if permission is None or permission not in (
-        SubitemPermission.WRITE.value,
-        SubitemPermission.ADMIN.value,
+        ProjectPermission.WRITE.value,
+        ProjectPermission.ADMIN.value,
     ):
         raise BizException(code="FORBIDDEN", message="需要子项写权限", status_code=403)
 
 
-async def check_subitem_admin(db: AsyncSession, user: User, subitem_id: int) -> None:
+async def check_project_admin(db: AsyncSession, user: User, project_id: int) -> None:
     """校验用户是否有子项管理员权限（admin 全局；子项成员需 permission=admin）。"""
     if user.role == Role.ADMIN:
         return
-    from app.core.constants import SubitemPermission
-    from app.models.subitem import UserSubitem
+    from app.core.constants import ProjectPermission
+    from app.models.project import UserProject
 
-    stmt = select(UserSubitem.permission).where(
-        UserSubitem.user_id == user.id, UserSubitem.subitem_id == subitem_id
+    stmt = select(UserProject.permission).where(
+        UserProject.user_id == user.id, UserProject.project_id == project_id
     )
     permission = (await db.execute(stmt)).scalar_one_or_none()
-    if permission != SubitemPermission.ADMIN.value:
+    if permission != ProjectPermission.ADMIN.value:
         raise BizException(code="FORBIDDEN", message="需要子项管理员权限", status_code=403)

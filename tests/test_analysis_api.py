@@ -6,36 +6,33 @@ from datetime import UTC, datetime, timedelta
 
 import numpy as np
 from httpx import AsyncClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 
 from app.database import AsyncSessionLocal
 from app.models.analysis import AnalysisJob
 from app.models.channel import Channel
 from app.models.device import Device
-from app.models.point import Point
+from app.models.project import Project
 from app.models.sensor import Sensor
-from app.models.subitem import Subitem
 from tests.conftest import login_headers
 
 
 async def _make_channel() -> tuple[int, int, int, str]:
     s = uuid.uuid4().hex[:8]
     async with AsyncSessionLocal() as db:
-        proj = Subitem(name=f"analysis-test-{s}")
+        proj = Project(name=f"analysis-test-{s}")
         db.add(proj)
         await db.flush()
         device = Device(
-            subitem_id=proj.id,
+            project_id=proj.id,
             device_code=f"GW-A-{s}",
             protocol="http_json",
             config={},
         )
         db.add(device)
         await db.flush()
-        point = Point(device_id=device.id, point_code=f"PT-{s}")
-        db.add(point)
         await db.flush()
-        sensor = Sensor(point_id=point.id, sensor_code=f"S-{s}")
+        sensor = Sensor(device_id=device.id, sensor_code=f"S-{s}")
         db.add(sensor)
         await db.flush()
         channel = Channel(
@@ -78,16 +75,9 @@ async def _cleanup(proj_id: int, dev_id: int, ch_id: int) -> None:
         await db.execute(delete(Reading).where(Reading.channel_id == ch_id))
         await db.execute(delete(Channel).where(Channel.id == ch_id))
         # 用子查询找该 device 下所有 point，再删 sensor + point
-        await db.execute(
-            delete(Sensor).where(
-                Sensor.point_id.in_(
-                    select(Point.id).where(Point.device_id == dev_id).scalar_subquery()
-                )
-            )
-        )
-        await db.execute(delete(Point).where(Point.device_id == dev_id))
+        await db.execute(delete(Sensor).where(Sensor.device_id == dev_id))
         await db.execute(delete(Device).where(Device.id == dev_id))
-        await db.execute(delete(Subitem).where(Subitem.id == proj_id))
+        await db.execute(delete(Project).where(Project.id == proj_id))
         await db.commit()
 
 
@@ -219,18 +209,16 @@ async def _make_channel_pair() -> tuple[int, int, list[int]]:
     """同一子项下两个通道（多通道分析测试用）。"""
     s = uuid.uuid4().hex[:8]
     async with AsyncSessionLocal() as db:
-        proj = Subitem(name=f"analysis-multi-{s}")
+        proj = Project(name=f"analysis-multi-{s}")
         db.add(proj)
         await db.flush()
         device = Device(
-            subitem_id=proj.id, device_code=f"GW-M-{s}", protocol="http_json", config={}
+            project_id=proj.id, device_code=f"GW-M-{s}", protocol="http_json", config={}
         )
         db.add(device)
         await db.flush()
-        point = Point(device_id=device.id, point_code=f"PT-M-{s}")
-        db.add(point)
         await db.flush()
-        sensor = Sensor(point_id=point.id, sensor_code=f"S-M-{s}")
+        sensor = Sensor(device_id=device.id, sensor_code=f"S-M-{s}")
         db.add(sensor)
         await db.flush()
         ch1 = Channel(sensor_id=sensor.id, channel_code=f"CH1-{s}", sampling_rate=100)
@@ -250,16 +238,9 @@ async def _cleanup_channels(proj_id: int, dev_id: int, channel_ids: list[int]) -
 
             await db.execute(delete(Reading).where(Reading.channel_id == cid))
         await db.execute(delete(Channel).where(Channel.id.in_(channel_ids)))
-        await db.execute(
-            delete(Sensor).where(
-                Sensor.point_id.in_(
-                    select(Point.id).where(Point.device_id == dev_id).scalar_subquery()
-                )
-            )
-        )
-        await db.execute(delete(Point).where(Point.device_id == dev_id))
+        await db.execute(delete(Sensor).where(Sensor.device_id == dev_id))
         await db.execute(delete(Device).where(Device.id == dev_id))
-        await db.execute(delete(Subitem).where(Subitem.id == proj_id))
+        await db.execute(delete(Project).where(Project.id == proj_id))
         await db.commit()
 
 
@@ -317,7 +298,7 @@ async def test_multichannel_plugin_flow(client: AsyncClient, admin_user: dict) -
         AnalyzerRegistry._analyzers.pop("fake_multi", None)
 
 
-async def test_multichannel_cross_subitem_rejected(client: AsyncClient, admin_user: dict) -> None:
+async def test_multichannel_cross_project_rejected(client: AsyncClient, admin_user: dict) -> None:
     from app.plugins.analyzers.base import AnalysisInput, AnalysisOutput, AnalysisPlugin
     from app.plugins.analyzers.registry import AnalyzerRegistry
 

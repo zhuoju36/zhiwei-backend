@@ -1,21 +1,21 @@
-"""传感器管理路由（挂在 point 下）。"""
+"""传感器管理路由（v0.9 起挂在 device 下，原 point 与 sensor 合一）。"""
 
 from fastapi import Query, status
 
 from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from app.core.exceptions import BizException
 from app.core.middleware import create_router
 from app.dependencies import (
     AdminUser,
     CurrentUser,
     DbSession,
-    check_subitem_access,
-    check_subitem_write_access,
+    check_project_access,
+    check_project_write_access,
 )
 from app.models.device import Device
-from app.models.point import Point
 from app.schemas.base import PageSchema
 from app.schemas.sensor import SensorCreate, SensorOut, SensorUpdate
-from app.services.point_service import PointService
+from app.services.device_service import DeviceService
 from app.services.sensor_service import SensorService
 
 router = create_router(prefix="/sensors", tags=["传感器"])
@@ -25,14 +25,15 @@ router = create_router(prefix="/sensors", tags=["传感器"])
 async def list_sensors(
     db: DbSession,
     current_user: CurrentUser,
-    point_id: int = Query(..., description="按测点筛选"),
+    device_id: int | None = Query(None, description="按设备筛选"),
     page: int = Query(1, ge=1),
     size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
 ) -> PageSchema[SensorOut]:
-    point = await PointService.get(db, point_id)
-    device = await db.get(Device, point.device_id)
-    await check_subitem_access(db, current_user, device.subitem_id)
-    rows, total = await SensorService.list_by_point(db, point_id, page, size)
+    if device_id is None:
+        raise BizException(code="BAD_REQUEST", message="device_id 必传", status_code=400)
+    device = await DeviceService.get(db, device_id)
+    await check_project_access(db, current_user, device.project_id)
+    rows, total = await SensorService.list_by_device(db, device_id, page, size)
     return PageSchema(
         total=total,
         page=page,
@@ -45,9 +46,8 @@ async def list_sensors(
 async def create_sensor(
     payload: SensorCreate, db: DbSession, current_user: CurrentUser
 ) -> SensorOut:
-    point = await PointService.get(db, payload.point_id)
-    device = await db.get(Device, point.device_id)
-    await check_subitem_write_access(db, current_user, device.subitem_id)
+    device = await DeviceService.get(db, payload.device_id)
+    await check_project_write_access(db, current_user, device.project_id)
     sensor = await SensorService.create(db, payload)
     return SensorOut.model_validate(sensor)
 
@@ -55,9 +55,8 @@ async def create_sensor(
 @router.get("/{sensor_id}", response_model=SensorOut)
 async def get_sensor(sensor_id: int, db: DbSession, current_user: CurrentUser) -> SensorOut:
     sensor = await SensorService.get(db, sensor_id)
-    point = await db.get(Point, sensor.point_id)
-    device = await db.get(Device, point.device_id)
-    await check_subitem_access(db, current_user, device.subitem_id)
+    device = await db.get(Device, sensor.device_id)
+    await check_project_access(db, current_user, device.project_id)
     return SensorOut.model_validate(sensor)
 
 
@@ -69,9 +68,8 @@ async def update_sensor(
     current_user: CurrentUser,
 ) -> SensorOut:
     sensor = await SensorService.get(db, sensor_id)
-    point = await db.get(Point, sensor.point_id)
-    device = await db.get(Device, point.device_id)
-    await check_subitem_write_access(db, current_user, device.subitem_id)
+    device = await db.get(Device, sensor.device_id)
+    await check_project_write_access(db, current_user, device.project_id)
     updated = await SensorService.update(db, sensor_id, payload)
     return SensorOut.model_validate(updated)
 

@@ -9,9 +9,9 @@
 
 - **多协议设备接入**：协议适配器插件化（Modbus / MQTT / OPC-UA / HTTP JSON …），边缘网关与云端共用同一套接口契约；**DTU 透传监听**（Modbus RTU over TCP）由独立进程 `dtu_server` 接入
 - **高频时序数据**：1000+ 测点级规模，asyncpg COPY 批量写入，TimescaleDB hypertable + 7 天保留策略
-- **统一 RBAC**：管理员 / 普通用户两级，用户-子项授权控制数据访问范围
-- **实时推送**：Redis Pub/Sub → WebSocket 广播，前端按子项订阅
-- **3D 模型管理**：子项多模型上传（OBJ/STL/PLY/glTF/GLB），后台自动转 GLB 供数字孪生加载
+- **统一 RBAC**：管理员 / 普通用户两级，用户-项目授权控制数据访问范围
+- **实时推送**：Redis Pub/Sub → WebSocket 广播，前端按项目订阅
+- **3D 模型管理**：项目多模型上传（OBJ/STL/PLY/glTF/GLB），后台自动转 GLB 供数字孪生加载
 - **模块化分析引擎**：FFT / 基础统计等算法以插件形式注册，社区可经 entry_points 接入自定义算法
 
 ## 技术栈
@@ -72,9 +72,8 @@ Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME`
 - **使用者**
   - [API 概览与鉴权](docs/api/overview.md)
   - [认证](docs/api/auth.md)
-  - [子项](docs/api/projects.md)
+  - [项目](docs/api/projects.md)
   - [设备](docs/api/devices.md)
-  - [测点](docs/api/points.md)
   - [传感器](docs/api/sensors.md)
   - [通道](docs/api/channels.md)
   - [协议](docs/api/protocols.md)
@@ -88,7 +87,7 @@ Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME`
   - [平台元数据](docs/api/platform.md)
   - [用户管理](docs/api/users.md)
 
-## 子项状态
+## 项目状态
 
 `v0.8.0` — 在 `v0.5.0` 基础上补齐**首次部署引导**：
 
@@ -97,28 +96,27 @@ Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME`
 - `scripts/init_admin.py` 替换 `scripts/seed.py`（已删除）：交互 / env 双模式，幂等
 - `docker/entrypoint.sh` + compose 改 entrypoint：env 传入 `ADMIN_USERNAME`/`ADMIN_PASSWORD` 时自动 init
 
-`v0.8a` — **术语重构**：`project` 统一改名 `subitem`（子项）。数据库 `projects/user_projects` 重命名为 `subitems/user_subitems`，API 路径 `/projects` → `/subitems`，Redis 频道 `project:{id}` → `subitem:{id}`。
+`v0.8a` — **术语调整**：监测范围术语一度从 `project` 改为 `subitem`（v0.8a），v0.9 回退为 `project`（见 v0.9 小节）。
 
-`v0.8b` — **多通道数据模型**：新增 `sensor`（传感器）/ `channel`（通道）/ `reading`（时序读数）三层，形成 `user → subitem → device → point → sensor → channel → readings` 七层树状拓扑：
+`v0.8b` — **多通道数据模型**：新增 `sensor` / `channel` / `reading` 分层（v0.9 起 point 并入 sensor，见下）：
 
-- `point` 收敛为物理位置（移除 unit/sampling_rate/alert_rules）
 - `channel` 承载单位、采样率、告警规则，一个 sensor 可有 1-N 个 channel，每个 channel 对应一组时序数据
 - `readings`（替代原 `sensor_raw`/`sensor_feature`）按 channel 存储，ingest 改用 `channel_code` 寻址
 - 新增 `/sensors`、`/channels` 路由与 service；告警、分析、实时推送全部下沉到 channel 粒度
 
-`v0.8c` — **3D 模型上传与转换**：一个子项可上传多个模型（OBJ/STL/PLY/glTF/GLB → GLB）：
+`v0.8c` — **3D 模型上传与转换**：一个项目可上传多个模型（OBJ/STL/PLY/glTF/GLB → GLB）：
 
 - 新增 `3d_models` 表 + `/api/v1/models/*` 路由（上传 / 列表 / 详情 / GLB 下载 / 删除）
 - Celery `reports` 队列后台转换（trimesh），`scripts/model_convert.py` 可独立 CLI 转换
 - IFC（BIM 格式）暂不支持，需 v0.9+ Blender/IfcOpenShell 转换器
-- 移除 `subitems.model_file_key` 冗余列，模型统一走 `3d_models` 表
+- 移除 `projects.model_file_key` 冗余列，模型统一走 `3d_models` 表
 
 `v0.8d` — **分析插件接口 v2（面向社区）**：
 
 - `AnalysisPlugin` 契约升级：自描述元信息（`params_schema` 供前端动态表单）+ `AnalysisInput`/`AnalysisOutput` 显式数据结构，替代裸 dict 与 `_internal_*` 魔法字段
 - 插件 = 纯计算单元（数组 + 参数 → 摘要/附件），不接触数据库与实时流；阈值告警保持系统基础功能（数据驱动，不插件化）
 - **双层注册表**：内置目录扫描 + Python entry_points（组 `shm_analyzers`），社区 `pip install` 即接入，含版本守卫（`plugin_api_version`）
-- **多通道支持**：`input_channels=N` 声明式拉取（限同子项），为模态分析铺路
+- **多通道支持**：`input_channels=N` 声明式拉取（限同项目），为模态分析铺路
 - 新增 `GET /api/v1/analysis/plugins` 元信息接口；内置 `statistics` 示例插件；社区开发指南见 `docs/development/plugin-dev.md`
 
 `v0.9.0` — **DTU 监听接入（拓扑 A：DTU 直连云）**：
@@ -127,6 +125,13 @@ Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME`
 - 新增监听型适配器契约（`supports_listen` + `decode_stream`，不破坏现有主动轮询适配器）与 `modbus_rtu_over_tcp` 协议（自研 CRC16 帧解析，粘包/半包/坏帧处理）
 - 一监听端口 = 一台设备（`Device.config.port`）；缓冲队列攒批入库 + 优雅停机排空，DTU 断线续传兜底
 
-`v0.5.0` 之前的累计能力：WS 子项权限校验、告警抑制（per-rule suppress_seconds）、多渠道通知（Webhook + Email）、modbus_tcp/mqtt 协议适配器、FFT 分析 + Celery `analysis` + MinIO、JWT 认证、阈值告警 + WebSocket 推送、TimescaleDB hypertable。
+`v0.9.0` — **数据模型重构 + DTU 监听接入**：
 
-尚未实现：每子项通知通道配置（v0.7+）、钉钉/企微/Slack 专属 payload、modbus_rtu/opcua 适配器、IFC→GLB 转换（Blender/IfcOpenShell）、模态/趋势预测分析插件、首次登录强制改密码、zxcvbn 密码强度评分、完整边缘网关进程、审计日志。
+- **point 与 sensor 合一**：实际一测点一传感器，删除 `points` 表，`sensor` 挂 device 下并携带位置字段（position / sensor_name）+ 仪器元数据；拓扑变为六层 `user → project → device → sensor → channel → readings`
+- **术语回退**：`subitem` 改回 `project`（v0.8a 曾改名，v0.9 回退），表 `projects/user_projects`、Redis 频道 `project:{id}`
+- **DTU 监听接入（拓扑 A）**：独立进程 `app/dtu_server`（同镜像、compose 一个 service）：接收 DTU 透传的 Modbus RTU 帧，解析后直写时序库 + Redis 实时推送 + 告警，与 API 进程完全解耦
+- 新增监听型适配器契约（`supports_listen` + `decode_stream`）与 `modbus_rtu_over_tcp` 协议（自研 CRC16 帧解析）；缓冲队列攒批入库 + 优雅停机，DTU 断线续传兜底
+
+`v0.5.0` 之前的累计能力：WS 项目权限校验、告警抑制（per-rule suppress_seconds）、多渠道通知（Webhook + Email）、modbus_tcp/mqtt 协议适配器、FFT 分析 + Celery `analysis` + MinIO、JWT 认证、阈值告警 + WebSocket 推送、TimescaleDB hypertable。
+
+尚未实现：每项目通知通道配置（v0.7+）、钉钉/企微/Slack 专属 payload、modbus_rtu/opcua 适配器、IFC→GLB 转换（Blender/IfcOpenShell）、模态/趋势预测分析插件、首次登录强制改密码、zxcvbn 密码强度评分、完整边缘网关进程、审计日志。

@@ -78,20 +78,26 @@ backend/
 |   |   +-- __init__.py         # 统一导出，方便 Alembic 自动发现
 |   |   +-- base.py             # Base = declarative_base()，所有模型继承
 |   |   +-- user.py
-|   |   +-- project.py
+|   |   +-- project.py          # Project + UserProject（项目/授权）
 |   |   +-- device.py
-|   |   +-- point.py
-|   |   +-- timeseries.py       # sensor_raw / sensor_feature 模型（TimescaleDB）
+|   |   +-- sensor.py           # 测点+传感器合一：位置 + 仪器元数据
+|   |   +-- channel.py          # 通道（unit / sampling_rate / alert_rules）
+|   |   +-- reading.py          # 时序数据（TimescaleDB hypertable）
 |   |   +-- alert.py
+|   |   +-- analysis.py         # 分析任务
+|   |   +-- model.py            # 3D 模型（项目多模型）
+|   |   +-- platform.py         # 平台元数据（单行）
 |   |
 |   +-- schemas/                # Pydantic v2 模型，严格分离 Request/Response
 |   |   +-- __init__.py
 |   |   +-- base.py             # 通用：PageSchema、ResponseSchema
 |   |   +-- user.py             # UserCreate, UserUpdate, UserOut, UserLogin
+|   |   +-- project.py
 |   |   +-- device.py
-|   |   +-- point.py
+|   |   +-- sensor.py           # SensorCreate/Out + ChannelCreate/Out + AlertRule
 |   |   +-- data.py             # DataQuery, DataBatchIngest, TimeSeriesOut
 |   |   +-- alert.py
+|   |   +-- analysis.py         # 分析任务 + 插件元信息
 |   |
 |   +-- routers/                # API 路由，一模块一文件
 |   |   +-- __init__.py         # 统一注册 router，前缀 /api/v1
@@ -99,21 +105,28 @@ backend/
 |   |   +-- users.py            # 用户 CRUD，仅 admin
 |   |   +-- projects.py         # 项目 CRUD + 用户授权
 |   |   +-- devices.py          # 设备管理
-|   |   +-- points.py           # 测点管理 + 三维坐标绑定
+|   |   +-- sensors.py          # 传感器管理（含位置/三维坐标）
+|   |   +-- channels.py         # 通道管理
 |   |   +-- data.py             # 时序数据查询 + 批量接入 (/ingest)
 |   |   +-- alerts.py           # 告警查询 + 确认
 |   |   +-- analysis.py         # 分析任务提交 + 结果查询
 |   |   +-- dashboard.py        # 大屏聚合数据（最新值、统计卡片）
 |   |   +-- models.py           # 3D 模型文件上传/转换状态查询
+|   |   +-- setup.py / platform.py / protocols.py
 |   |
 |   +-- services/               # 业务逻辑层，路由薄、服务厚
 |   |   +-- __init__.py
 |   |   +-- user_service.py
+|   |   +-- project_service.py
 |   |   +-- device_service.py
+|   |   +-- sensor_service.py   # 传感器（测点）CRUD
+|   |   +-- channel_service.py
 |   |   +-- data_service.py     # 时序数据读写核心：批量插入、降采样查询
 |   |   +-- alert_service.py    # 告警规则检查、告警生命周期
 |   |   +-- analysis_service.py # 分析任务编排、结果存储
 |   |   +-- model_service.py    # 3D 模型文件处理、转换任务触发
+|   |
+|   +-- dtus/                   # DTU 监听接入（v0.9，app/dtu_server 独立进程）
 |   |
 |   +-- plugins/                # 插件化扩展目录
 |   |   +-- __init__.py
@@ -391,7 +404,7 @@ from typing import List, Dict, Any
 @dataclass
 class RawReading:
     device_code: str  # 设备唯一编码，对应 devices.device_code
-    point_code: str  # 测点编码，对应 points.point_code
+    channel_code: str  # 通道编码，对应 channels.channel_code（v0.8 起）
     timestamp: datetime  # 采样时间戳（UTC）
     value: float
     unit: str = ""
@@ -500,7 +513,7 @@ class ModbusTcpAdapter(ProtocolAdapter):
                 readings.append(
                     RawReading(
                         device_code=self.config.extra.get("device_code", ""),
-                        point_code=reg["point_code"],
+                        channel_code=reg["channel_code"],
                         timestamp=ts,
                         value=0.0,
                         quality="bad",
@@ -513,7 +526,7 @@ class ModbusTcpAdapter(ProtocolAdapter):
             readings.append(
                 RawReading(
                     device_code=self.config.extra.get("device_code", ""),
-                    point_code=reg["point_code"],
+                    channel_code=reg["channel_code"],
                     timestamp=ts,
                     value=value,
                     unit=reg.get("unit", ""),
@@ -578,7 +591,7 @@ class DataService:
                 (
                     r.timestamp,
                     r.device_code,  # 实际应映射为 device_id，此处简化
-                    r.point_code,
+                    r.channel_code,
                     r.value,
                     r.quality,
                     r.extra,

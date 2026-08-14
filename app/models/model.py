@@ -22,7 +22,7 @@ class Model(Base):
     __tablename__ = "3d_models"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    subitem_id: Mapped[int] = mapped_column(ForeignKey("subitems.id"), nullable=False, index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     original_key: Mapped[str] = mapped_column(String(256), nullable=False)  # MinIO 源文件
     original_name: Mapped[str] = mapped_column(String(256), nullable=False)  # 用户上传文件名
     source_format: Mapped[str] = mapped_column(String(16), nullable=False)  # obj/stl/ply/gltf/glb

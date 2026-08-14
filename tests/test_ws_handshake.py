@@ -45,7 +45,7 @@ def test_ws_handshake_then_subscribe() -> None:
         def __init__(self):
             self.accepted = False
             self.sent: list[str] = []
-            self._recv_queue: list[bytes] = [b'{"type":"cmd:subscribe","subitem_id":1}']
+            self._recv_queue: list[bytes] = [b'{"type":"cmd:subscribe","project_id":1}']
 
         async def accept(self):
             self.accepted = True
@@ -86,7 +86,7 @@ def test_ws_handshake_then_subscribe() -> None:
         asyncio.run(ws_data(fake, token=token))
 
     assert fake.accepted is True
-    assert any('"cmd:subscribed"' in t and '"subitem_id": 1' in t for t in fake.sent)
+    assert any('"cmd:subscribed"' in t and '"project_id": 1' in t for t in fake.sent)
 
 
 def test_ws_invalid_token_rejected() -> None:

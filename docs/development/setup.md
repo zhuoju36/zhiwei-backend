@@ -117,6 +117,6 @@ docker compose down -v               # 停止并清理卷（数据丢失）
 
 ## 6. IDE 配置建议
 
-- **Pylance / mypy**：子项使用 SQLAlchemy 2.0 `Mapped[]` 注解，配置 `pythonVersion = "3.12"`
+- **Pylance / mypy**：项目使用 SQLAlchemy 2.0 `Mapped[]` 注解，配置 `pythonVersion = "3.12"`
 - **pytest**：自动发现，async 模式由 `pyproject.toml` 配置
 - **Docker 扩展**：绑定 `docker-compose.yml` 直接管理容器

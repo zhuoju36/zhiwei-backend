@@ -13,9 +13,8 @@ from app.database import AsyncSessionLocal
 from app.models.alert import Alert
 from app.models.channel import Channel
 from app.models.device import Device
-from app.models.point import Point
+from app.models.project import Project
 from app.models.sensor import Sensor
-from app.models.subitem import Subitem
 from app.services.alert_service import (
     TriggerEvent,
     close_open_alerts,
@@ -39,21 +38,18 @@ class _Helpers:
     async def make_channel(db_cleanup: list[int]) -> int:
         s = uuid.uuid4().hex[:8]
         async with AsyncSessionLocal() as db:
-            proj = Subitem(name=f"supp-test-{s}")
+            proj = Project(name=f"supp-test-{s}")
             db.add(proj)
             await db.flush()
             device = Device(
-                subitem_id=proj.id,
+                project_id=proj.id,
                 device_code=f"GW-S-{s}",
                 protocol="http_json",
                 config={},
             )
             db.add(device)
             await db.flush()
-            point = Point(device_id=device.id, point_code=f"PT-{s}")
-            db.add(point)
-            await db.flush()
-            sensor = Sensor(point_id=point.id, sensor_code=f"S-{s}")
+            sensor = Sensor(device_id=device.id, sensor_code=f"S-{s}")
             db.add(sensor)
             await db.flush()
             channel = Channel(
@@ -77,16 +73,13 @@ class _Helpers:
             ch = await db2.get(Channel, channel_id)
             if ch:
                 sensor = await db2.get(Sensor, ch.sensor_id)
-                point = await db2.get(Point, sensor.point_id) if sensor else None
-                device = await db2.get(Device, point.device_id) if point else None
+                device = await db2.get(Device, sensor.device_id) if sensor else None
                 await db2.delete(ch)
                 if sensor:
                     await db2.delete(sensor)
-                if point:
-                    await db2.delete(point)
                 if device:
                     await db2.delete(device)
-                    proj = await db2.get(Subitem, device.subitem_id)
+                    proj = await db2.get(Project, device.project_id)
                     if proj:
                         await db2.delete(proj)
             await db2.commit()
