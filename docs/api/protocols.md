@@ -1,6 +1,6 @@
 # 协议
 
-> v0.9.0 · 更新于 2026-08-13
+> v0.9.1 · 更新于 2026-08-13
 
 `GET /api/v1/protocols` 返回云端注册的协议适配器元数据，供前端管理页动态生成协议配置表单。后端启动时由 `AdapterRegistry.discover()` 扫描 `app/plugins/protocols/*.py` 自动发现，新协议 = 新增一个模块文件即可。
 
