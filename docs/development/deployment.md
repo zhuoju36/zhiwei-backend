@@ -66,17 +66,24 @@ celery -A app.tasks.celery_app:celery_app worker \
 
 ## 5. 数据库迁移流水线
 
-建议部署顺序：
+**Compose 一键启动（默认，v0.9.2 起）**：`api` 服务 entrypoint（`docker/entrypoint.sh`）在启动前自动执行：
+
+```
+等 Postgres ready → alembic upgrade head（幂等）→ scripts/init_db（hypertable/保留策略，幂等）→ init_admin（可选）→ 启动 uvicorn
+```
+
+`worker` / `dtu-server` 通过 `depends_on: api (service_healthy)` 保证在迁移完成后才启动。**首次 `docker compose up -d` 即完成建表与 TimescaleDB 初始化**，无需手动步骤。
+
+如需手动执行（本地开发 / 排查）：
 
 ```bash
 1. docker compose up -d postgres redis minio
-2. 等待 postgres health: healthy
-3. .venv/bin/alembic upgrade head
-4. .venv/bin/python -m scripts.init_db
-5. docker compose up -d api worker
+2. .venv/bin/alembic upgrade head
+3. .venv/bin/python -m scripts.init_db
+4. docker compose up -d api worker dtu-server
 ```
 
-生产推荐用独立 migration job 容器（一次性执行后退出），不要让 API 容器启动时自动跑迁移。
+生产可选更严格的**独立 migration job**（一次性容器执行迁移后退出），api 启动时关闭自动迁移——`entrypoint.sh` 中迁移步骤幂等，两种模式可共存；多实例部署时由 `api` healthcheck 串行化迁移（避免多容器同时跑 `alembic` 竞争）。
 
 ## 6. 反向代理 / Nginx
 

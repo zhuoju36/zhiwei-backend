@@ -55,7 +55,7 @@ cp .env.example .env
 # 完成后使用 admin/<your-password> 登录
 ```
 
-Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 环境变量，entrypoint 会自动调 `init_admin.py`（生产推荐用 Docker Secrets）。
+**Docker 一键启动**：`docker compose up -d api worker dtu-server` 即可——`api` entrypoint 会自动执行 `alembic upgrade head` + `scripts/init_db`（TimescaleDB hypertable/保留策略），`worker`/`dtu-server` 依赖 `api` 健康检查，迁移完成后才启动。可选在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 环境变量自动创建首个 admin（生产推荐用 Docker Secrets）。
 
 ## 文档导航
 
