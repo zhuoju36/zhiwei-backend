@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # 边缘网关接入
     edge_api_key: str = "edge-secret-key"
 
+    # DTU 监听接入（v0.9，app/dtu_server 独立进程）
+    dtu_batch_size: int = 100  # 攒批条数
+    dtu_flush_interval_s: float = 0.5  # 攒批最大等待秒数
+
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"

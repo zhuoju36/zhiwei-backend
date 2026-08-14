@@ -7,7 +7,7 @@
 
 ## 核心能力
 
-- **多协议设备接入**：协议适配器插件化（Modbus / MQTT / OPC-UA / HTTP JSON …），边缘网关与云端共用同一套接口契约
+- **多协议设备接入**：协议适配器插件化（Modbus / MQTT / OPC-UA / HTTP JSON …），边缘网关与云端共用同一套接口契约；**DTU 透传监听**（Modbus RTU over TCP）由独立进程 `dtu_server` 接入
 - **高频时序数据**：1000+ 测点级规模，asyncpg COPY 批量写入，TimescaleDB hypertable + 7 天保留策略
 - **统一 RBAC**：管理员 / 普通用户两级，用户-子项授权控制数据访问范围
 - **实时推送**：Redis Pub/Sub → WebSocket 广播，前端按子项订阅
@@ -120,6 +120,12 @@ Docker 用户可在 `docker-compose.yml` 的 `api` 服务设置 `ADMIN_USERNAME`
 - **双层注册表**：内置目录扫描 + Python entry_points（组 `shm_analyzers`），社区 `pip install` 即接入，含版本守卫（`plugin_api_version`）
 - **多通道支持**：`input_channels=N` 声明式拉取（限同子项），为模态分析铺路
 - 新增 `GET /api/v1/analysis/plugins` 元信息接口；内置 `statistics` 示例插件；社区开发指南见 `docs/development/plugin-dev.md`
+
+`v0.9.0` — **DTU 监听接入（拓扑 A：DTU 直连云）**：
+
+- 独立进程 `app/dtu_server`（同镜像、docker-compose 一个 service）：接收 DTU 透传的 Modbus RTU 帧，解析后经 `data_service.batch_ingest` 直写时序库 + Redis 实时推送 + 告警，与 API 进程完全解耦
+- 新增监听型适配器契约（`supports_listen` + `decode_stream`，不破坏现有主动轮询适配器）与 `modbus_rtu_over_tcp` 协议（自研 CRC16 帧解析，粘包/半包/坏帧处理）
+- 一监听端口 = 一台设备（`Device.config.port`）；缓冲队列攒批入库 + 优雅停机排空，DTU 断线续传兜底
 
 `v0.5.0` 之前的累计能力：WS 子项权限校验、告警抑制（per-rule suppress_seconds）、多渠道通知（Webhook + Email）、modbus_tcp/mqtt 协议适配器、FFT 分析 + Celery `analysis` + MinIO、JWT 认证、阈值告警 + WebSocket 推送、TimescaleDB hypertable。
 

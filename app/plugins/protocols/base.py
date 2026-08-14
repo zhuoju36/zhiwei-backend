@@ -38,6 +38,7 @@ class ProtocolAdapter(ABC):
     name: str = "base"
     version: str = "1.0.0"
     supports_batch: bool = False  # 是否支持批量读取
+    supports_listen: bool = False  # 监听型适配器（DTU 透传接入）标志
 
     def __init__(self, config: ProtocolConfig):
         self.config = config
@@ -58,6 +59,14 @@ class ProtocolAdapter(ABC):
     @abstractmethod
     async def disconnect(self) -> None:
         """优雅关闭连接，释放资源。"""
+
+    def decode_stream(self, data: bytes) -> list[RawReading]:
+        """可选：把一段字节流解析为 RawReading 列表（监听型适配器实现）。
+
+        字节流缓冲与粘包/半包切分由 TcpServerManager 负责；本方法只负责从
+        "足够完整的字节"中解析合法帧并产出读数。默认不支持监听模式。
+        """
+        raise NotImplementedError(f"{type(self).__name__} 不支持监听模式")
 
     async def health_check(self) -> dict[str, Any]:
         return {"connected": self._connected, "last_error": self._last_error}

@@ -149,6 +149,32 @@
 
 字段缺失 / JSON 错误 / 队列满：记日志并丢弃，不中断订阅。
 
+### modbus_rtu_over_tcp（v0.9 新增，监听型 / DTU 透传）
+
+**拓扑**：现场仪表(RS485/Modbus RTU) → DTU(4G 透传) → 云端 `dtu_server` 监听端口。DTU 是透明管道，把现场设备返回的 Modbus RTU 响应帧字节流原样推送；`app/dtu_server` 独立进程接收、解析（CRC16 校验）并直写时序库，与 API 进程解耦（`docker compose up dtu-server` 启动）。
+
+```json
+{
+  "host": "0.0.0.0",
+  "port": 5021,
+  "slave_id": 1,
+  "device_code": "GW-DTU-001",
+  "registers": [
+    {"address": 0, "count": 2, "data_type": "float32",
+     "channel_code": "ACC-X", "scale": 0.001, "unit": "m/s2"}
+  ]
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `host` / `port` | 监听地址与端口（**一端口一设备**；`port` 必填） |
+| `slave_id` | 现场从站地址（默认 1） |
+| `registers` | 通道映射，语义同 `modbus_tcp`；**约定响应帧寄存器从 address 0 起连续排布** |
+| `device_code` | 缺省取设备 `device_code` |
+
+约定：粘包/半包与坏帧（CRC 错）由服务端自动处理；异常响应仅记日志不产出读数。
+
 ---
 
 ## 适配器自动发现
@@ -158,7 +184,7 @@
 1. 在 `app/plugins/protocols/` 下新建 `<protocol>_adapter.py`
 2. 继承 `ProtocolAdapter`（`app/plugins/protocols/base.py`，**禁止修改契约**）
 3. 设置类属性 `name = "<protocol>"`（与 `devices.protocol` 字段值一致）
-4. 实现 `connect / read_batch / disconnect`
+4. 实现 `connect / read_batch / disconnect`；监听型适配器额外设 `supports_listen = True` 并实现 `decode_stream`（无需 `connect` 语义，见 `modbus_rtu_over_tcp` 示例）
 5. 进程启动时 `AdapterRegistry.discover()` 自动注册
 
 详见 [AGENTS.md §4.2](../../AGENTS.md)。

@@ -416,6 +416,7 @@ class ProtocolAdapter(ABC):
     name: str = "base"
     version: str = "1.0.0"
     supports_batch: bool = False  # 是否支持批量读取
+    supports_listen: bool = False  # 监听型适配器（DTU 透传接入，v0.9 可选扩展）
 
     def __init__(self, config: ProtocolConfig):
         self.config = config
@@ -436,6 +437,12 @@ class ProtocolAdapter(ABC):
     @abstractmethod
     async def disconnect(self) -> None:
         # 优雅关闭连接，释放资源
+        pass
+
+    def decode_stream(self, data: bytes) -> List[RawReading]:
+        # 可选：监听型适配器实现（supports_listen=True）。
+        # 把字节流解析为 RawReading 列表；字节流缓冲/粘包由 TcpServerManager 负责。
+        # 默认 NotImplementedError（不影响主动轮询适配器）
         pass
 
     async def health_check(self) -> Dict[str, Any]:

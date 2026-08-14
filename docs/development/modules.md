@@ -285,7 +285,7 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 
 ### `app/plugins/protocols/`
 
-- `base.py` — `ProtocolAdapter` 抽象基类（**接口契约，禁止修改**）+ `RawReading` / `ProtocolConfig` dataclass
+- `base.py` — `ProtocolAdapter` 抽象基类（**接口契约，禁止修改**）+ `RawReading` / `ProtocolConfig` dataclass；v0.9 增加**可选**监听能力：`supports_listen` 类属性 + `decode_stream(data) -> list[RawReading]`（默认 `NotImplementedError`，不破坏主动轮询适配器）
 - `registry.py` — `AdapterRegistry.discover()` 扫描包目录，注册所有 `ProtocolAdapter` 子类
 - `http_json_adapter.py` — 示例适配器：HTTP GET 返回 JSON 数组，httpx 实现
 - `modbus_tcp_adapter.py`（v0.3 新增）— `ModbusTcpAdapter`（pymodbus）
@@ -294,12 +294,29 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 - `mqtt_adapter.py`（v0.3 新增）— `MqttAdapter`（aiomqtt）
   - 后台订阅协程 + 内部 `asyncio.Queue` 缓冲
   - JSON payload 容错（字段缺失 / 格式错误丢弃）
+- `modbus_rtu_tcp.py`（v0.9 新增，监听型）— `ModbusRtuOverTcpAdapter`：DTU 透传接入
+  - `supports_listen = True`，`decode_stream` 切帧（CRC16 校验、粘包/半包/坏帧重同步）+ 解码
+  - RTU 帧解析自研（~50 行），不依赖 pymodbus 易变 framer API；解码复用 `modbus_tcp_adapter._DECODERS`
 
 新增协议步骤（AGENTS.md 第 4.2 节）：
 1. 在 `app/plugins/protocols/` 下新建 `<protocol>_adapter.py`
-2. 继承 `ProtocolAdapter`，实现 `connect / read_batch / disconnect`
+2. 继承 `ProtocolAdapter`，实现 `connect / read_batch / disconnect`；监听型额外设 `supports_listen = True` + `decode_stream`
 3. 类属性 `name` 必须与 `devices.protocol` 字段值匹配
 4. 无需手动注册，自动扫描
+
+## DTU 监听接入（v0.9）
+
+### `app/dtus/server.py:TcpServerManager`
+
+- 拓扑 A（DTU 直连云）：独立 asyncio 进程 `python -m app.dtu_server` 接收 DTU 透传的 Modbus RTU 帧，与 FastAPI 解耦（docker-compose 同镜像独立 service）
+- `start()`：拉取 `protocol="modbus_rtu_over_tcp"` 的设备 → 每设备 `asyncio.start_server`（**一端口一设备**，`config.port`）
+- 连接处理：字节流缓冲 → `split_rtu_frames` 切帧 → `adapter.decode_stream` → `ReadingIn` 入队
+- 攒批消费：`asyncio.Queue` + 消费者（`dtu_batch_size` 条或 `dtu_flush_interval_s` 秒 flush）→ `data_service.batch_ingest`（COPY 直写 readings + Redis 实时推送 + Celery 告警）
+- `stop()` 优雅停机：停 accept → 排空队列 → 取消消费者
+
+### `app/dtu_server.py`
+
+进程入口（`python -m app.dtu_server`）：预热 asyncpg 池 → `TcpServerManager.start()` → SIGTERM/SIGINT 优雅退出。
 
 ### `app/plugins/analyzers/`（v0.8d 接口 v2）
 

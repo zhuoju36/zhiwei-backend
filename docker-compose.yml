@@ -77,6 +77,24 @@ services:
       redis:
         condition: service_healthy
 
+  dtu-server:
+    build: .
+    container_name: shm-dtu-server
+    command: python -m app.dtu_server
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://shm_user:shm_pass@postgres:5432/shm_db
+      REDIS_URL: redis://redis:6379/0
+    # DTU 监听端口由设备配置决定（Device.config.port）；
+    # 生产按需映射，如 5021-5030。开发期不映射（本机直连时除外）。
+    ports:
+      - "5021-5030:5021-5030"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   pgdata:
   redisdata:
