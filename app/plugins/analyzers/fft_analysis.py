@@ -1,6 +1,6 @@
 """FFT 频谱分析插件。
 
-签名遵循 AnalysisPlugin.analyze(point_id, time_range, data, config) -> dict。
+签名遵循 AnalysisPlugin.analyze(channel_id, time_range, data, config) -> dict。
 
 输入：data 为 numpy.ndarray（一维等间隔采样），config 至少含 sampling_rate。
 返回：JSON 友好的 dict（含 dominant_freq / dominant_magnitude / num_samples / sampling_rate），
@@ -22,7 +22,7 @@ class FftAnalysis(AnalysisPlugin):
 
     async def analyze(
         self,
-        point_id: int,
+        channel_id: int,
         time_range: tuple,
         data: np.ndarray,
         config: dict[str, Any],
@@ -55,7 +55,7 @@ class FftAnalysis(AnalysisPlugin):
         # 真实非等间隔需结合 time_range；此处省略（v0.5+ 完善）
 
         return {
-            "point_id": point_id,
+            "channel_id": channel_id,
             "sampling_rate": sr,
             "num_samples": n,
             "dominant_freq": dominant_freq,

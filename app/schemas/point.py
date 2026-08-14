@@ -1,4 +1,4 @@
-"""测点 Schema。"""
+"""测点 Schema（v0.8b 精简：point 只是物理位置，不含 unit/sampling_rate/alert_rules）。"""
 
 from datetime import datetime
 from typing import Any
@@ -13,9 +13,7 @@ class AlertRule(BaseModel):
     threshold: float
     level: str = Field(pattern=r"^(info|warning|danger)$", description="告警级别")
     message: str | None = None
-    # 抑制窗口（秒）：告警关闭后此时间内再次触发会复用最近一条已关闭告警（重开），
-    # 而非新建，避免告警表 chattering。0 表示不抑制。
-    suppress_seconds: int = Field(default=60, ge=0)
+    suppress_seconds: int = Field(default=60, ge=0, description="抑制窗口（秒）")
 
 
 class PointCreate(BaseModel):
@@ -23,19 +21,13 @@ class PointCreate(BaseModel):
     point_code: str = Field(min_length=1, max_length=64)
     point_name: str | None = Field(default=None, max_length=128)
     point_type: str | None = Field(default=None, max_length=32)
-    unit: str | None = Field(default=None, max_length=16)
     position: dict[str, Any] | None = None
-    alert_rules: list[AlertRule] | None = None
-    sampling_rate: int = Field(default=1, ge=1)
 
 
 class PointUpdate(BaseModel):
     point_name: str | None = Field(default=None, max_length=128)
     point_type: str | None = Field(default=None, max_length=32)
-    unit: str | None = Field(default=None, max_length=16)
     position: dict[str, Any] | None = None
-    alert_rules: list[AlertRule] | None = None
-    sampling_rate: int | None = Field(default=None, ge=1)
     is_active: bool | None = None
 
 
@@ -47,9 +39,6 @@ class PointOut(BaseModel):
     point_code: str
     point_name: str | None
     point_type: str | None
-    unit: str | None
     position: dict[str, Any] | None
-    alert_rules: list[dict[str, Any]] | None
-    sampling_rate: int
     is_active: bool
     created_at: datetime

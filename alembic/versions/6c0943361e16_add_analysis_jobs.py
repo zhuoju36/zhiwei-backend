@@ -36,9 +36,10 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['submitted_by'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.drop_index(op.f('sensor_feature_time_idx'), table_name='sensor_feature')
-    op.drop_index(op.f('idx_sensor_raw_device_point'), table_name='sensor_raw')
-    op.drop_index(op.f('sensor_raw_time_idx'), table_name='sensor_raw')
+    # TimescaleDB 自动创建的索引仅在 init_db.py 之后存在；用 IF EXISTS 兼容。
+    op.execute("DROP INDEX IF EXISTS sensor_feature_time_idx")
+    op.execute("DROP INDEX IF EXISTS idx_sensor_raw_device_point")
+    op.execute("DROP INDEX IF EXISTS sensor_raw_time_idx")
     # ### end Alembic commands ###
 
 

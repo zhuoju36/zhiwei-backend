@@ -21,7 +21,7 @@ def test_fft_detects_50hz_sine() -> None:
     data = _sine(50.0, sr, duration_s=2.0)
     result = asyncio.run(
         plugin.analyze(
-            point_id=1,
+            channel_id=1,
             time_range=("2026-01-01T00:00:00Z", "2026-01-01T00:00:02Z"),
             data=data,
             config={"sampling_rate": sr},
@@ -39,7 +39,7 @@ def test_fft_finds_higher_harmonic() -> None:
     sr = 200.0
     data = _sine(150.0, sr, duration_s=2.0)
     result = asyncio.run(
-        plugin.analyze(point_id=1, time_range=("", ""), data=data, config={"sampling_rate": sr})
+        plugin.analyze(channel_id=1, time_range=("", ""), data=data, config={"sampling_rate": sr})
     )
     # 150Hz 在 200Hz 采样下混叠为 200-150=50Hz
     assert abs(result["dominant_freq"] - 50.0) < 1.0

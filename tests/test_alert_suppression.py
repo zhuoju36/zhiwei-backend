@@ -11,8 +11,10 @@ from sqlalchemy import delete
 
 from app.database import AsyncSessionLocal
 from app.models.alert import Alert
+from app.models.channel import Channel
 from app.models.device import Device
 from app.models.point import Point
+from app.models.sensor import Sensor
 from app.models.subitem import Subitem
 from app.services.alert_service import (
     TriggerEvent,
@@ -34,7 +36,7 @@ class _Helpers:
         )
 
     @staticmethod
-    async def make_point(db_cleanup: list[int]) -> int:
+    async def make_channel(db_cleanup: list[int]) -> int:
         s = uuid.uuid4().hex[:8]
         async with AsyncSessionLocal() as db:
             proj = Subitem(name=f"supp-test-{s}")
@@ -50,24 +52,41 @@ class _Helpers:
             await db.flush()
             point = Point(device_id=device.id, point_code=f"PT-{s}")
             db.add(point)
+            await db.flush()
+            sensor = Sensor(point_id=point.id, sensor_code=f"S-{s}")
+            db.add(sensor)
+            await db.flush()
+            channel = Channel(
+                sensor_id=sensor.id,
+                channel_code=f"ACC-{s}",
+                unit="m/s2",
+                sampling_rate=100,
+            )
+            db.add(channel)
             await db.commit()
-            await db.refresh(point)
-            db_cleanup.append(point.id)
-            return point.id
+            await db.refresh(channel)
+            db_cleanup.append(channel.id)
+            return channel.id
 
     @staticmethod
-    async def cleanup(point_id: int) -> None:
+    async def cleanup(channel_id: int) -> None:
         async with AsyncSessionLocal() as db:
-            await db.execute(delete(Alert).where(Alert.point_id == point_id))
+            await db.execute(delete(Alert).where(Alert.channel_id == channel_id))
             await db.commit()
         async with AsyncSessionLocal() as db2:
-            p = await db2.get(Point, point_id)
-            if p:
-                d = await db2.get(Device, p.device_id)
-                await db2.delete(p)
-                if d:
-                    proj = await db2.get(Subitem, d.subitem_id)
-                    await db2.delete(d)
+            ch = await db2.get(Channel, channel_id)
+            if ch:
+                sensor = await db2.get(Sensor, ch.sensor_id)
+                point = await db2.get(Point, sensor.point_id) if sensor else None
+                device = await db2.get(Device, point.device_id) if point else None
+                await db2.delete(ch)
+                if sensor:
+                    await db2.delete(sensor)
+                if point:
+                    await db2.delete(point)
+                if device:
+                    await db2.delete(device)
+                    proj = await db2.get(Subitem, device.subitem_id)
                     if proj:
                         await db2.delete(proj)
             await db2.commit()
@@ -76,7 +95,7 @@ class _Helpers:
 async def test_suppress_window_reopens_existing_alert() -> None:
     """触发 → 关闭 → 60s 内再触发 → 复用同一条 alert（id 不变，started_at 更新）。"""
     cleanup_ids: list[int] = []
-    pid = await _Helpers.make_point(cleanup_ids)
+    pid = await _Helpers.make_channel(cleanup_ids)
     try:
         t0 = datetime.now(UTC) - timedelta(seconds=30)
         async with AsyncSessionLocal() as db:
@@ -102,7 +121,7 @@ async def test_suppress_window_reopens_existing_alert() -> None:
 
 
 async def test_outside_window_creates_new_alert() -> None:
-    pid = await _Helpers.make_point([])
+    pid = await _Helpers.make_channel([])
     try:
         t0 = datetime.now(UTC) - timedelta(seconds=120)
         async with AsyncSessionLocal() as db:
@@ -123,7 +142,7 @@ async def test_outside_window_creates_new_alert() -> None:
 
 
 async def test_suppress_seconds_zero_disables_reopen() -> None:
-    pid = await _Helpers.make_point([])
+    pid = await _Helpers.make_channel([])
     try:
         t0 = datetime.now(UTC)
         async with AsyncSessionLocal() as db:
@@ -142,7 +161,7 @@ async def test_suppress_seconds_zero_disables_reopen() -> None:
 
 
 async def test_open_alert_update_returns_not_created() -> None:
-    pid = await _Helpers.make_point([])
+    pid = await _Helpers.make_channel([])
     try:
         t0 = datetime.now(UTC)
         async with AsyncSessionLocal() as db:

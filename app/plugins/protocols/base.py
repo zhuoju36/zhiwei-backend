@@ -12,7 +12,7 @@ from typing import Any
 @dataclass
 class RawReading:
     device_code: str  # 设备唯一编码，对应 devices.device_code
-    point_code: str  # 测点编码，对应 points.point_code
+    channel_code: str  # 通道编码，对应 channels.channel_code（v0.8 起）
     timestamp: datetime  # 采样时间戳（UTC）
     value: float
     unit: str = ""

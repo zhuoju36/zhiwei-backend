@@ -1,10 +1,10 @@
 """告警检查任务（运行在 Celery alerts 队列）。
 
 设计：
-- check_threshold_batch 接收一批 readings（每条含 point_id / value / timestamp / quality）
-- 批量查测点的 alert_rules
-- 评估每条 reading；触发 upsert 或关闭 open alert
-- 对新增/关闭的 alert 通过 Redis Pub/Sub 推送到对应项目频道（type=data:alert）
+- check_threshold_batch 接收一批 readings（每条含 channel_id / value / timestamp / quality）
+- 批量查 channel 的 alert_rules
+- 评估每条 reading；触发 trigger_alert 或关闭 open alert
+- 对新增/关闭的 alert 通过 Redis Pub/Sub 推送到对应子项频道（type=data:alert）
 
 注：测试环境（pytest + asyncio 默认 loop）需要 nest_asyncio 允许在已运行
 loop 内调用 asyncio.run()；由 tests/conftest.py 的 eager_celery fixture 启用。
@@ -39,7 +39,7 @@ async def _publish_alert(subitem_id: int, alert_payload: dict[str, Any]) -> None
         logger.exception("告警推送失败")
 
 
-async def _open_levels(session, point_id: int) -> set[str]:
+async def _open_levels(session, channel_id: int) -> set[str]:
     from sqlalchemy import select
 
     from app.models.alert import Alert
@@ -47,7 +47,9 @@ async def _open_levels(session, point_id: int) -> set[str]:
     rows = (
         (
             await session.execute(
-                select(Alert.level).where(Alert.point_id == point_id, Alert.is_resolved.is_(False))
+                select(Alert.level).where(
+                    Alert.channel_id == channel_id, Alert.is_resolved.is_(False)
+                )
             )
         )
         .scalars()
@@ -61,33 +63,37 @@ async def _process_readings(readings: list[dict[str, Any]]) -> None:
     if not readings:
         return
 
-    point_ids = sorted({r["point_id"] for r in readings if r.get("point_id") is not None})
-    if not point_ids:
+    channel_ids = sorted({r["channel_id"] for r in readings if r.get("channel_id") is not None})
+    if not channel_ids:
         return
 
     from sqlalchemy import select
 
+    from app.models.channel import Channel
     from app.models.device import Device
     from app.models.point import Point
+    from app.models.sensor import Sensor
 
     async with AsyncSessionLocal() as db:
-        # 批量取 alert_rules 与 device→project 映射（一次 JOIN）
+        # 批量取 alert_rules 与 device→subitem 映射（一次 JOIN）
         rows = (
             await db.execute(
-                select(Point.id, Point.alert_rules, Device.subitem_id)
+                select(Channel.id, Channel.alert_rules, Device.subitem_id)
+                .join(Sensor, Sensor.id == Channel.sensor_id)
+                .join(Point, Point.id == Sensor.point_id)
                 .join(Device, Device.id == Point.device_id)
-                .where(Point.id.in_(point_ids))
+                .where(Channel.id.in_(channel_ids))
             )
         ).all()
-        meta = {pid: (rules or [], subitem_id) for pid, rules, subitem_id in rows}
+        meta = {cid: (rules or [], subitem_id) for cid, rules, subitem_id in rows}
 
         for reading in readings:
-            pid = reading.get("point_id")
+            cid = reading.get("channel_id")
             value = reading.get("value")
             ts_raw = reading.get("timestamp")
-            if pid is None or value is None:
+            if cid is None or value is None:
                 continue
-            rules, subitem_id = meta.get(pid, ([], None))
+            rules, subitem_id = meta.get(cid, ([], None))
             if subitem_id is None or not rules:
                 continue
             ts = _parse_ts(ts_raw)
@@ -95,16 +101,16 @@ async def _process_readings(readings: list[dict[str, Any]]) -> None:
             events = alert_service.evaluate_thresholds(float(value), rules)
             triggered_levels = {e.level for e in events}
             # 关闭当前 open 但已不再触发的告警（按 level）
-            open_levels = await _open_levels(db, pid)
+            open_levels = await _open_levels(db, cid)
             for lvl in open_levels - triggered_levels:
-                closed = await alert_service.close_open_alerts(db, pid, lvl, ts)
+                closed = await alert_service.close_open_alerts(db, cid, lvl, ts)
                 if closed is not None:
                     await db.commit()
                     await _publish_alert(
                         subitem_id,
                         {
                             "alert_id": closed.id,
-                            "point_id": pid,
+                            "channel_id": cid,
                             "level": lvl,
                             "status": "resolved",
                             "ended_at": closed.ended_at.isoformat(),
@@ -113,13 +119,13 @@ async def _process_readings(readings: list[dict[str, Any]]) -> None:
 
             # 对触发的 level trigger（含抑制窗口重开语义）
             for event in events:
-                alert, created = await alert_service.trigger_alert(db, pid, event, ts)
+                alert, created = await alert_service.trigger_alert(db, cid, event, ts)
                 await db.commit()
                 await _publish_alert(
                     subitem_id,
                     {
                         "alert_id": alert.id,
-                        "point_id": pid,
+                        "channel_id": cid,
                         "level": event.level,
                         "value": event.value,
                         "threshold": event.threshold,
@@ -134,19 +140,17 @@ async def _process_readings(readings: list[dict[str, Any]]) -> None:
                         from app.notifications.base import AlertPayload
                         from app.services.notification_service import dispatch_alert
 
-                        device_code = reading.get("device_code", "")
-                        point_code = reading.get("point_code", "")
                         payload: AlertPayload = {
                             "alert_id": alert.id,
-                            "point_id": pid,
+                            "channel_id": cid,
                             "subitem_id": subitem_id,
                             "level": event.level,
                             "value": event.value,
                             "threshold": event.threshold,
                             "message": alert.message,
                             "started_at": alert.started_at.isoformat(),
-                            "device_code": device_code,
-                            "point_code": point_code,
+                            "device_code": reading.get("device_code", ""),
+                            "channel_code": reading.get("channel_code", ""),
                         }
                         await dispatch_alert(payload)
                     except Exception:

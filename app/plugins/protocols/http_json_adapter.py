@@ -1,7 +1,7 @@
 """HTTP JSON 协议适配器：轮询返回 JSON 数组的智能传感器 HTTP 接口。
 
 期望对端返回格式：
-[{"device_code": "...", "point_code": "...", "value": 1.23, "unit": "m/s2", "quality": "good"}, ...]
+[{"device_code": "...", "channel_code": "...", "value": 1.23, "unit": "m/s2", ...}, ...]
 """
 
 import httpx
@@ -45,7 +45,7 @@ class HttpJsonAdapter(ProtocolAdapter):
             readings.append(
                 RawReading(
                     device_code=item["device_code"],
-                    point_code=item["point_code"],
+                    channel_code=item["channel_code"],
                     timestamp=ts,
                     value=float(item["value"]),
                     unit=item.get("unit", ""),

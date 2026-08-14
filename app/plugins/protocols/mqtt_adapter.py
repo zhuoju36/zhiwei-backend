@@ -4,7 +4,7 @@
 read_batch 把队列里累积的全部消息一次性取出并解析为 RawReading。
 
 期望 payload：
-    {"device_code": "...", "point_code": "...", "value": 1.23, "unit": "...",
+    {"device_code": "...", "channel_code": "...", "value": 1.23, "unit": "...",
      "timestamp": "ISO8601 可选", "quality": "good"}
 
 设备配置示例（存入 devices.config JSONB）：
@@ -92,7 +92,7 @@ class MqttAdapter(ProtocolAdapter):
         try:
             self._queue.put_nowait(payload)
         except asyncio.QueueFull:
-            logger.warning("MQTT 队列已满，丢弃 payload: %s", payload.get("point_code"))
+            logger.warning("MQTT 队列已满，丢弃 payload: %s", payload.get("channel_code"))
 
     async def read_batch(self) -> list[RawReading]:
         readings: list[RawReading] = []
@@ -110,7 +110,7 @@ class MqttAdapter(ProtocolAdapter):
     def _parse(payload: dict[str, Any]) -> RawReading | None:
         try:
             device_code = payload["device_code"]
-            point_code = payload["point_code"]
+            channel_code = payload["channel_code"]
             value = float(payload["value"])
         except (KeyError, TypeError, ValueError):
             logger.warning("MQTT payload 缺字段或值无效: %s", payload)
@@ -125,7 +125,7 @@ class MqttAdapter(ProtocolAdapter):
             ts = datetime.now(UTC)
         return RawReading(
             device_code=device_code,
-            point_code=point_code,
+            channel_code=channel_code,
             timestamp=ts,
             value=value,
             unit=str(payload.get("unit", "")),
@@ -133,7 +133,7 @@ class MqttAdapter(ProtocolAdapter):
             extra={
                 k: v
                 for k, v in payload.items()
-                if k not in {"device_code", "point_code", "value", "unit", "timestamp", "quality"}
+                if k not in {"device_code", "channel_code", "value", "unit", "timestamp", "quality"}
             },
         )
 

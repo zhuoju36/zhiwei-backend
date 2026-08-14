@@ -11,12 +11,11 @@ from app.dependencies import (
     check_subitem_access,
     check_subitem_write_access,
 )
-from app.models.device import Device
-from app.models.point import Point
+from app.models.channel import Channel
 from app.schemas.analysis import AnalysisJobCreate, AnalysisJobOut, AnalysisSubmitOut
 from app.schemas.base import PageSchema
 from app.services import analysis_service
-from app.services.data_service import check_point_project
+from app.services.data_service import check_channel_subitem
 from app.tasks.analysis_tasks import run_analysis_job
 from app.utils import minio_client
 
@@ -33,17 +32,16 @@ async def submit_job(
     db: DbSession,
     current_user: CurrentUser,
 ) -> AnalysisSubmitOut:
-    subitem_id = await check_point_project(payload.point_id)
+    subitem_id = await check_channel_subitem(payload.channel_id)
     await check_subitem_write_access(db, current_user, subitem_id)
     analysis_service.validate_plugin(payload.plugin)
     job = await analysis_service.create_job(
-        db, payload.point_id, payload.plugin, payload.params, current_user.id
+        db, payload.channel_id, payload.plugin, payload.params, current_user.id
     )
     await db.commit()
     try:
         run_analysis_job.delay(job.id)
     except Exception:
-        # broker 不可达时回滚状态；保留为 pending 让运维恢复后处理
         pass
     return AnalysisSubmitOut(job_id=job.id, status=job.status)
 
@@ -52,20 +50,18 @@ async def submit_job(
 async def list_jobs(
     db: DbSession,
     current_user: CurrentUser,
-    point_id: int | None = Query(None),
+    channel_id: int | None = Query(None),
     plugin: str | None = Query(None),
     status: str | None = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
 ) -> PageSchema[AnalysisJobOut]:
-    # 权限过滤：list_jobs 默认仅返回用户有访问权限的项目的任务
-    if point_id is not None:
-        await check_point_project(point_id)
-        project_id_for_point = await check_point_project(point_id)
-        await check_subitem_access(db, current_user, project_id_for_point)
+    if channel_id is not None:
+        subitem_id = await check_channel_subitem(channel_id)
+        await check_subitem_access(db, current_user, subitem_id)
 
     rows, total = await analysis_service.list_jobs(
-        db, point_id=point_id, plugin=plugin, status=status, page=page, size=size
+        db, channel_id=channel_id, plugin=plugin, status=status, page=page, size=size
     )
     return PageSchema(
         total=total,
@@ -78,18 +74,18 @@ async def list_jobs(
 @router.get("/jobs/{job_id}", response_model=AnalysisJobOut)
 async def get_job(job_id: int, db: DbSession, current_user: CurrentUser) -> AnalysisJobOut:
     job = await analysis_service.get_job(db, job_id)
-    point = await db.get(Point, job.point_id)
-    device = await db.get(Device, point.device_id)
-    await check_subitem_access(db, current_user, device.subitem_id)
+    channel = await db.get(Channel, job.channel_id)
+    subitem_id = await check_channel_subitem(channel.id)
+    await check_subitem_access(db, current_user, subitem_id)
     return _job_to_out(job)
 
 
 @router.get("/jobs/{job_id}/result")
 async def get_job_result(job_id: int, db: DbSession, current_user: CurrentUser) -> Response:
     job = await analysis_service.get_job(db, job_id)
-    point = await db.get(Point, job.point_id)
-    device = await db.get(Device, point.device_id)
-    await check_subitem_access(db, current_user, device.subitem_id)
+    channel = await db.get(Channel, job.channel_id)
+    subitem_id = await check_channel_subitem(channel.id)
+    await check_subitem_access(db, current_user, subitem_id)
     if job.status != "success" or not job.result_key:
         from app.core.exceptions import BizException
 

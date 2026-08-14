@@ -1,4 +1,4 @@
-"""测点业务逻辑。"""
+"""测点业务逻辑（v0.8b 起：point = 物理位置，alert_rules 移到 channel）。"""
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,10 +42,10 @@ class PointService:
         return list(rows), total
 
     @staticmethod
-    async def list_by_project(
+    async def list_by_subitem(
         db: AsyncSession, subitem_id: int, page: int, size: int
     ) -> tuple[list[Point], int]:
-        """通过 JOIN device 一次性查项目下所有测点。"""
+        """通过 JOIN device 一次性查子项下所有测点。"""
         total = (
             await db.execute(
                 select(func.count())
@@ -86,16 +86,12 @@ class PointService:
         ).scalar_one_or_none()
         if existing is not None:
             raise BizException(code="POINT_CODE_EXISTS", message="测点编码已存在", status_code=409)
-        rules_dump = [r.model_dump() for r in payload.alert_rules] if payload.alert_rules else None
         point = Point(
             device_id=payload.device_id,
             point_code=payload.point_code,
             point_name=payload.point_name,
             point_type=payload.point_type,
-            unit=payload.unit,
             position=payload.position,
-            alert_rules=rules_dump,
-            sampling_rate=payload.sampling_rate,
         )
         db.add(point)
         await db.flush()
@@ -105,8 +101,6 @@ class PointService:
     async def update(db: AsyncSession, point_id: int, payload: PointUpdate) -> Point:
         point = await PointService.get(db, point_id)
         data = payload.model_dump(exclude_unset=True)
-        if "alert_rules" in data and data["alert_rules"] is not None:
-            data["alert_rules"] = [r if isinstance(r, dict) else r for r in data["alert_rules"]]
         for field, value in data.items():
             setattr(point, field, value)
         await db.flush()
@@ -117,15 +111,3 @@ class PointService:
         point = await PointService.get(db, point_id)
         await db.delete(point)
         await db.flush()
-
-    @staticmethod
-    async def list_alert_rules_batch(
-        db: AsyncSession, point_ids: list[int]
-    ) -> dict[int, list[dict]]:
-        """批量取测点的 alert_rules（供告警任务使用，避免 N+1）。"""
-        if not point_ids:
-            return {}
-        rows = (
-            await db.execute(select(Point.id, Point.alert_rules).where(Point.id.in_(point_ids)))
-        ).all()
-        return {pid: (rules or []) for pid, rules in rows}

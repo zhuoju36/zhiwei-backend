@@ -11,7 +11,7 @@ from app.plugins.protocols.mqtt_adapter import MqttAdapter
 def _good_payload() -> dict:
     return {
         "device_code": "GW-MQTT",
-        "point_code": "ACC-X",
+        "channel_code": "ACC-X",
         "value": 0.42,
         "unit": "m/s2",
         "quality": "good",
@@ -23,7 +23,7 @@ def test_parse_valid_payload() -> None:
     reading = MqttAdapter._parse(_good_payload())
     assert reading is not None
     assert reading.device_code == "GW-MQTT"
-    assert reading.point_code == "ACC-X"
+    assert reading.channel_code == "ACC-X"
     assert reading.value == 0.42
     assert reading.unit == "m/s2"
     assert reading.quality == "good"
@@ -40,7 +40,7 @@ def test_parse_missing_device_code() -> None:
 
 def test_parse_missing_point_code() -> None:
     p = _good_payload()
-    del p["point_code"]
+    del p["channel_code"]
     assert MqttAdapter._parse(p) is None
 
 
@@ -62,11 +62,11 @@ async def test_read_batch_drains_queue() -> None:
     """read_batch 把队列里全部消息一次取出。"""
     adapter = MqttAdapter(ProtocolConfig(host="broker", extra={"device_code": "GW"}))
     await adapter._queue.put(_good_payload())
-    await adapter._queue.put({**_good_payload(), "point_code": "ACC-Y", "value": 0.5})
+    await adapter._queue.put({**_good_payload(), "channel_code": "ACC-Y", "value": 0.5})
     readings = await adapter.read_batch()
     assert len(readings) == 2
-    assert readings[0].point_code == "ACC-X"
-    assert readings[1].point_code == "ACC-Y"
+    assert readings[0].channel_code == "ACC-X"
+    assert readings[1].channel_code == "ACC-Y"
     assert adapter._queue.empty()
 
 

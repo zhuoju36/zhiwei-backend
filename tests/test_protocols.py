@@ -20,8 +20,8 @@ def test_registry_unknown_returns_none() -> None:
 
 async def test_http_json_read_batch() -> None:
     payload = [
-        {"device_code": "GW-001", "point_code": "ACC-X", "value": 0.5, "unit": "m/s2"},
-        {"device_code": "GW-001", "point_code": "ACC-Y", "value": -0.2},
+        {"device_code": "GW-001", "channel_code": "ACC-X", "value": 0.5, "unit": "m/s2"},
+        {"device_code": "GW-001", "channel_code": "ACC-Y", "value": -0.2},
     ]
 
     def handler(request: httpx.Request) -> httpx.Response:

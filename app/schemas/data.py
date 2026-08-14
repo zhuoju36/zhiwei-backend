@@ -12,7 +12,7 @@ class ReadingIn(BaseModel):
     """边缘网关上行的单条读数（按编码寻址，不传内部 ID）。"""
 
     device_code: str = Field(min_length=1, max_length=64)
-    point_code: str = Field(min_length=1, max_length=64)
+    channel_code: str = Field(min_length=1, max_length=64)
     timestamp: datetime
     value: float
     unit: str = ""
@@ -34,6 +34,6 @@ class TimeSeriesPoint(BaseModel):
 
 
 class TimeSeriesOut(BaseModel):
-    point_id: int
+    channel_id: int
     interval: str
     data: list[TimeSeriesPoint]

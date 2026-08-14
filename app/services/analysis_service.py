@@ -21,10 +21,14 @@ def validate_plugin(name: str) -> None:
 
 
 async def create_job(
-    db: AsyncSession, point_id: int, plugin: str, params: dict[str, Any], submitted_by: int | None
+    db: AsyncSession, channel_id: int, plugin: str, params: dict[str, Any], submitted_by: int | None
 ) -> AnalysisJob:
     job = AnalysisJob(
-        point_id=point_id, plugin=plugin, params=params, submitted_by=submitted_by, status="pending"
+        channel_id=channel_id,
+        plugin=plugin,
+        params=params,
+        submitted_by=submitted_by,
+        status="pending",
     )
     db.add(job)
     await db.flush()
@@ -41,7 +45,7 @@ async def get_job(db: AsyncSession, job_id: int) -> AnalysisJob:
 async def list_jobs(
     db: AsyncSession,
     *,
-    point_id: int | None = None,
+    channel_id: int | None = None,
     plugin: str | None = None,
     status: str | None = None,
     page: int = 1,
@@ -49,9 +53,9 @@ async def list_jobs(
 ) -> tuple[list[AnalysisJob], int]:
     stmt = select(AnalysisJob)
     count_stmt = select(func.count()).select_from(AnalysisJob)
-    if point_id is not None:
-        stmt = stmt.where(AnalysisJob.point_id == point_id)
-        count_stmt = count_stmt.where(AnalysisJob.point_id == point_id)
+    if channel_id is not None:
+        stmt = stmt.where(AnalysisJob.channel_id == channel_id)
+        count_stmt = count_stmt.where(AnalysisJob.channel_id == channel_id)
     if plugin is not None:
         stmt = stmt.where(AnalysisJob.plugin == plugin)
         count_stmt = count_stmt.where(AnalysisJob.plugin == plugin)

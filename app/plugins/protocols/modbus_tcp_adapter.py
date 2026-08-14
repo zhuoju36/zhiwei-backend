@@ -12,9 +12,9 @@
       "timeout_ms": 3000,
       "registers": [
         {"address": 0, "count": 2, "data_type": "float32",
-         "point_code": "ACC-X", "scale": 0.001, "unit": "m/s2"},
+         "channel_code": "ACC-X", "scale": 0.001, "unit": "m/s2"},
         {"address": 2, "count": 1, "data_type": "uint16",
-         "point_code": "TEMP", "scale": 0.1, "unit": "°C"}
+         "channel_code": "TEMP", "scale": 0.1, "unit": "°C"}
       ]
     }
 """
@@ -105,7 +105,7 @@ class ModbusTcpAdapter(ProtocolAdapter):
         ts = self._now()
         readings: list[RawReading] = []
         for reg in self._registers:
-            point_code = reg.get("point_code", "")
+            channel_code = reg.get("channel_code", "")
             dtype = reg.get("data_type", "uint16")
             scale = float(reg.get("scale", 1.0))
             unit = reg.get("unit", "")
@@ -123,7 +123,7 @@ class ModbusTcpAdapter(ProtocolAdapter):
                 readings.append(
                     RawReading(
                         device_code=self.config.extra.get("device_code", ""),
-                        point_code=point_code,
+                        channel_code=channel_code,
                         timestamp=ts,
                         value=value,
                         unit=unit,
@@ -131,11 +131,11 @@ class ModbusTcpAdapter(ProtocolAdapter):
                     )
                 )
             except Exception as exc:
-                logger.warning("Modbus 读取失败 (point=%s): %s", point_code, exc)
+                logger.warning("Modbus 读取失败 (point=%s): %s", channel_code, exc)
                 readings.append(
                     RawReading(
                         device_code=self.config.extra.get("device_code", ""),
-                        point_code=point_code,
+                        channel_code=channel_code,
                         timestamp=ts,
                         value=0.0,
                         unit=unit,

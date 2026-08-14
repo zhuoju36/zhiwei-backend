@@ -9,10 +9,12 @@ from collections.abc import AsyncGenerator
 import nest_asyncio
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete
 
 from app.core.security import hash_password
 from app.database import AsyncSessionLocal
 from app.main import app
+from app.models.subitem import UserSubitem
 from app.models.user import User
 from app.services import data_service
 from app.tasks.celery_app import celery_app
@@ -70,6 +72,11 @@ async def admin_user() -> AsyncGenerator[dict, None]:
         user_id = user.id
     yield {"id": user_id, "username": username, "password": password}
     async with AsyncSessionLocal() as db:
+        from app.models.analysis import AnalysisJob
+
+        # 先清依赖（FK 分析任务 / 用户-子项关联）
+        await db.execute(delete(AnalysisJob).where(AnalysisJob.submitted_by == user_id))
+        await db.execute(delete(UserSubitem).where(UserSubitem.user_id == user_id))
         user = await db.get(User, user_id)
         if user is not None:
             await db.delete(user)

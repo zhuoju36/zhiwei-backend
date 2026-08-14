@@ -62,7 +62,7 @@ async def test_read_batch_normal() -> None:
                     "address": 0,
                     "count": 2,
                     "data_type": "float32",
-                    "point_code": "ACC-X",
+                    "channel_code": "ACC-X",
                     "scale": 0.001,
                     "unit": "m/s2",
                 },
@@ -70,7 +70,7 @@ async def test_read_batch_normal() -> None:
                     "address": 2,
                     "count": 1,
                     "data_type": "uint16",
-                    "point_code": "TEMP",
+                    "channel_code": "TEMP",
                     "scale": 0.1,
                     "unit": "°C",
                 },
@@ -91,9 +91,9 @@ async def test_read_batch_normal() -> None:
     adapter._client.read_holding_registers = fake_read
     readings = await adapter.read_batch()
     assert len(readings) == 2
-    assert readings[0].point_code == "ACC-X"
+    assert readings[0].channel_code == "ACC-X"
     assert abs(readings[0].value - 3.0 * 0.001) < 1e-9
-    assert readings[1].point_code == "TEMP"
+    assert readings[1].channel_code == "TEMP"
     assert abs(readings[1].value - 25.0) < 1e-9
     assert all(r.quality == "good" for r in readings)
 
@@ -106,8 +106,8 @@ async def test_read_batch_isolates_point_errors() -> None:
         extra={
             "device_code": "GW-TEST",
             "registers": [
-                {"address": 0, "count": 1, "data_type": "uint16", "point_code": "P1"},
-                {"address": 2, "count": 1, "data_type": "uint16", "point_code": "P2"},
+                {"address": 0, "count": 1, "data_type": "uint16", "channel_code": "P1"},
+                {"address": 2, "count": 1, "data_type": "uint16", "channel_code": "P2"},
             ],
         },
     )

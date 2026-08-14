@@ -12,7 +12,7 @@ class AnalysisPlugin(ABC):
     @abstractmethod
     async def analyze(
         self,
-        point_id: int,
+        channel_id: int,
         time_range: tuple,
         data: Any,
         config: dict[str, Any],

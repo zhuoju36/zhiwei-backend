@@ -10,6 +10,7 @@ from app.routers import (
     alerts,
     analysis,
     auth,
+    channels,
     dashboard,
     data,
     devices,
@@ -17,6 +18,7 @@ from app.routers import (
     platform,
     points,
     protocols,
+    sensors,
     setup,
     subitems,
     users,
@@ -31,6 +33,8 @@ api_router.include_router(subitems.router)
 api_router.include_router(protocols.router)
 api_router.include_router(devices.router)
 api_router.include_router(points.router)
+api_router.include_router(sensors.router)
+api_router.include_router(channels.router)
 api_router.include_router(data.router)
 api_router.include_router(alerts.router)
 api_router.include_router(analysis.router)

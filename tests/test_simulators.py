@@ -50,7 +50,7 @@ async def test_run_edge_adapter_loop() -> None:
     fake_readings = [
         MagicMock(
             device_code="GW",
-            point_code="P1",
+            channel_code="P1",
             timestamp=MagicMock(isoform=lambda: "2026-08-13T12:00:00+00:00"),
             value=1.0,
             unit="m/s2",

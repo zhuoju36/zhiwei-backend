@@ -1,4 +1,4 @@
-"""时序数据读写核心：批量 COPY 写入、按间隔智能路由查询。
+"""时序数据读写核心：批量 COPY 写入 readings、按间隔智能路由查询。
 
 连接池采用懒初始化，避免依赖应用 lifespan（测试与 Celery 场景同样可用）。
 """
@@ -58,21 +58,26 @@ async def close() -> None:
 async def _resolve_code_map(
     conn: asyncpg.Connection, readings: list[ReadingIn]
 ) -> dict[tuple[str, str], tuple[int, int, int]]:
-    """批量将 (device_code, point_code) 映射为 (device_id, point_id, subitem_id)。"""
+    """批量将 (device_code, channel_code) 映射为 (channel_id, project_id)。
+
+    返回：{(device_code, channel_code): (channel_id, subitem_id)}
+    """
     device_codes = list({r.device_code for r in readings})
     rows = await conn.fetch(
         """
-        SELECT d.id AS device_id, d.device_code, d.subitem_id, p.id AS point_id, p.point_code
+        SELECT d.id AS device_id, d.device_code, d.subitem_id,
+               c.id AS channel_id, c.channel_code
         FROM devices d
         JOIN points p ON p.device_id = d.id
+        JOIN sensors s ON s.point_id = p.id
+        JOIN channels c ON c.sensor_id = s.id
         WHERE d.device_code = ANY($1)
         """,
         device_codes,
     )
     return {
-        (row["device_code"], row["point_code"]): (
-            row["device_id"],
-            row["point_id"],
+        (row["device_code"], row["channel_code"]): (
+            row["channel_id"],
             row["subitem_id"],
         )
         for row in rows
@@ -80,7 +85,7 @@ async def _resolve_code_map(
 
 
 async def batch_ingest(readings: list[ReadingIn]) -> int:
-    """批量写入 sensor_raw，返回实际写入条数。未知编码的读数被丢弃并记日志。
+    """批量写入 readings，返回实际写入条数。未知编码的读数被丢弃并记日志。
 
     写完后：
     1. Redis 最新值缓存与实时推送（_publish_realtime）
@@ -94,20 +99,16 @@ async def batch_ingest(readings: list[ReadingIn]) -> int:
         code_map = await _resolve_code_map(conn, readings)
 
         records = []
-        accepted: list[
-            tuple[ReadingIn, int, int, int]
-        ] = []  # (reading, device_id, point_id, subitem_id)
+        accepted: list[tuple[ReadingIn, int, int]] = []  # (reading, channel_id, subitem_id)
         skipped = 0
         for r in readings:
-            ids = code_map.get((r.device_code, r.point_code))
+            ids = code_map.get((r.device_code, r.channel_code))
             if ids is None:
                 skipped += 1
                 continue
-            device_id, point_id, subitem_id = ids
-            records.append(
-                (r.timestamp, device_id, point_id, r.value, r.quality.value, json.dumps(r.extra))
-            )
-            accepted.append((r, device_id, point_id, subitem_id))
+            channel_id, subitem_id = ids
+            records.append((r.timestamp, channel_id, r.value, r.quality.value, json.dumps(r.extra)))
+            accepted.append((r, channel_id, subitem_id))
 
         if skipped:
             logger.warning("批量接入丢弃 %d 条未知编码读数", skipped)
@@ -115,30 +116,57 @@ async def batch_ingest(readings: list[ReadingIn]) -> int:
             return 0
 
         await conn.copy_records_to_table(
-            "sensor_raw",
+            "readings",
             records=records,
-            columns=["time", "device_id", "point_id", "value", "quality", "metadata"],
+            columns=["time", "channel_id", "value", "quality", "metadata"],
         )
 
-    await _publish_realtime(readings, code_map)
+    await _publish_realtime(accepted)
     await _dispatch_alert_check(accepted)
     return len(records)
 
 
-async def _dispatch_alert_check(accepted: list[tuple[ReadingIn, int, int, int]]) -> None:
+async def _publish_realtime(accepted: list[tuple[ReadingIn, int, int]]) -> None:
+    """写入 Redis 最新值缓存，并按子项频道发布实时推送（供 WebSocket 广播）。"""
+    try:
+        rds = await get_redis()
+        async with rds.pipeline(transaction=False) as pipe:
+            for r, channel_id, subitem_id in accepted:
+                payload = {
+                    "type": "data:realtime",
+                    "payload": {
+                        "channel_id": channel_id,
+                        "device_code": r.device_code,
+                        "channel_code": r.channel_code,
+                        "value": r.value,
+                        "unit": r.unit,
+                        "quality": r.quality.value,
+                        "timestamp": r.timestamp.isoformat(),
+                    },
+                }
+                pipe.set(f"latest:{channel_id}", json.dumps(payload["payload"]))
+                pipe.publish(f"subitem:{subitem_id}", json.dumps(payload))
+            await pipe.execute()
+    except Exception:
+        # 推送失败不影响写入主流程
+        logger.exception("实时推送失败")
+
+
+async def _dispatch_alert_check(accepted: list[tuple[ReadingIn, int, int]]) -> None:
     """将已写入的读数投递到 Celery alerts 队列做阈值检查。"""
     if not accepted:
         return
     payload = [
         {
-            "device_id": device_id,
-            "point_id": point_id,
+            "channel_id": channel_id,
             "subitem_id": subitem_id,
+            "device_code": r.device_code,
+            "channel_code": r.channel_code,
             "value": r.value,
             "timestamp": r.timestamp.isoformat(),
             "quality": r.quality.value,
         }
-        for r, device_id, point_id, subitem_id in accepted
+        for r, channel_id, subitem_id in accepted
     ]
     try:
         # 延迟导入避免循环依赖（alert_tasks 间接依赖 data_service.get_redis）
@@ -149,103 +177,49 @@ async def _dispatch_alert_check(accepted: list[tuple[ReadingIn, int, int, int]])
         logger.exception("投递告警检查任务失败")
 
 
-async def _publish_realtime(
-    readings: list[ReadingIn], code_map: dict[tuple[str, str], tuple[int, int, int]]
-) -> None:
-    """写入 Redis 最新值缓存，并按项目频道发布实时推送（供 WebSocket 广播）。"""
-    try:
-        rds = await get_redis()
-        async with rds.pipeline(transaction=False) as pipe:
-            for r in readings:
-                ids = code_map.get((r.device_code, r.point_code))
-                if ids is None:
-                    continue
-                _, point_id, subitem_id = ids
-                payload = {
-                    "type": "data:realtime",
-                    "payload": {
-                        "point_id": point_id,
-                        "value": r.value,
-                        "unit": r.unit,
-                        "quality": r.quality.value,
-                        "timestamp": r.timestamp.isoformat(),
-                    },
-                }
-                pipe.set(f"latest:{point_id}", json.dumps(payload["payload"]))
-                pipe.publish(f"subitem:{subitem_id}", json.dumps(payload))
-            await pipe.execute()
-    except Exception:
-        # 推送失败不影响写入主流程
-        logger.exception("实时推送失败")
-
-
-async def get_latest(point_id: int) -> dict | None:
+async def get_latest(channel_id: int) -> dict | None:
     rds = await get_redis()
-    raw = await rds.get(f"latest:{point_id}")
+    raw = await rds.get(f"latest:{channel_id}")
     return json.loads(raw) if raw else None
 
 
 async def query_timeseries(
-    point_id: int, start: datetime, end: datetime, interval: str
+    channel_id: int, start: datetime, end: datetime, interval: str
 ) -> list[TimeSeriesPoint]:
     """根据时间范围与聚合间隔智能选择数据源：
 
-    - interval 为 raw/1s/100ms 且跨度 <= 1 小时 -> sensor_raw 原始表
-    - 其余 -> sensor_feature_1min 连续聚合
+    - interval 为 raw/1s/100ms 且跨度 <= 1 小时 -> readings 原始表
+    - 其余 -> 连续聚合视图（当前未启用连续聚合，返回 raw）
     """
-    span_hours = (end - start).total_seconds() / 3600
     pool = await get_pool()
 
-    if interval in ("raw", "100ms", "1s") and span_hours <= 1:
-        sql = """
-            SELECT time AS ts, value
-            FROM sensor_raw
-            WHERE point_id = $1 AND time BETWEEN $2 AND $3
-            ORDER BY time ASC
-        """
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(sql, point_id, start, end)
-        return [TimeSeriesPoint(ts=row["ts"], value=row["value"]) for row in rows]
-
+    # 当前 v0.8b 无连续聚合（sensor_feature_1min 已删除），全部按 raw 返回
     sql = """
-        SELECT bucket AS ts, avg_val, max_val, min_val, rms_val
-        FROM sensor_feature_1min
-        WHERE point_id = $1 AND bucket BETWEEN $2 AND $3
-        ORDER BY bucket ASC
+        SELECT time AS ts, value
+        FROM readings
+        WHERE channel_id = $1 AND time BETWEEN $2 AND $3
+        ORDER BY time ASC
     """
-    try:
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(sql, point_id, start, end)
-    except asyncpg.UndefinedTableError as exc:
-        raise BizException(
-            code="AGGREGATE_NOT_READY",
-            message="连续聚合视图未初始化，请先执行 scripts/init_db.py",
-            status_code=503,
-        ) from exc
-    return [
-        TimeSeriesPoint(
-            ts=row["ts"],
-            avg_val=row["avg_val"],
-            max_val=row["max_val"],
-            min_val=row["min_val"],
-            rms_val=row["rms_val"],
-        )
-        for row in rows
-    ]
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(sql, channel_id, start, end)
+    return [TimeSeriesPoint(ts=row["ts"], value=row["value"]) for row in rows]
 
 
-async def check_point_project(point_id: int) -> int:
-    """返回测点所属项目 ID，用于路由层权限校验。"""
+async def check_channel_subitem(channel_id: int) -> int:
+    """返回通道所属子项 ID，用于路由层权限校验。"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         subitem_id = await conn.fetchval(
             """
             SELECT d.subitem_id
-            FROM points p JOIN devices d ON d.id = p.device_id
-            WHERE p.id = $1
+            FROM channels c
+            JOIN sensors s ON s.id = c.sensor_id
+            JOIN points p ON p.id = s.point_id
+            JOIN devices d ON d.id = p.device_id
+            WHERE c.id = $1
             """,
-            point_id,
+            channel_id,
         )
     if subitem_id is None:
-        raise BizException(code="POINT_NOT_FOUND", message="测点不存在", status_code=404)
+        raise BizException(code="CHANNEL_NOT_FOUND", message="通道不存在", status_code=404)
     return subitem_id

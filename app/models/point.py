@@ -1,11 +1,15 @@
-"""测点模型（与三维模型坐标绑定）。"""
+"""测点模型：物理位置。
+
+v0.8b 起 `point` 只是物理位置（塔 3 第 1 个测点），unit / sampling_rate /
+alert_rules 下沉到 channel。一个 point 可挂多个 sensor，每个 sensor 有 1-N 个 channel。
+"""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -13,6 +17,7 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.device import Device
+    from app.models.sensor import Sensor
 
 
 class Point(Base):
@@ -21,14 +26,14 @@ class Point(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     device_id: Mapped[int] = mapped_column(ForeignKey("devices.id"), nullable=False)
-    point_code: Mapped[str] = mapped_column(String(64), nullable=False)  # 测点编码
+    point_code: Mapped[str] = mapped_column(String(64), nullable=False)  # 测点编码（位置 ID）
     point_name: Mapped[str | None] = mapped_column(String(128))
-    point_type: Mapped[str | None] = mapped_column(String(32))  # acceleration, strain, temp...
-    unit: Mapped[str | None] = mapped_column(String(16))  # m/s2, με, °C, mm
+    point_type: Mapped[str | None] = mapped_column(String(32))  # 位置类型，如 structural_joint
     position: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # {x, y, z} 三维坐标
-    alert_rules: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)  # 阈值告警规则
-    sampling_rate: Mapped[int] = mapped_column(Integer, default=1, server_default="1")  # Hz
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     device: Mapped[Device] = relationship(back_populates="points")
+    sensors: Mapped[list[Sensor]] = relationship(
+        back_populates="point", cascade="all, delete-orphan"
+    )

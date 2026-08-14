@@ -11,7 +11,7 @@ class AlertOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    point_id: int
+    channel_id: int
     alert_type: str | None
     level: str | None
     message: str | None

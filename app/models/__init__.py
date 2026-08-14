@@ -3,21 +3,26 @@
 from app.models.alert import Alert
 from app.models.analysis import AnalysisJob
 from app.models.base import Base
+from app.models.channel import Channel
 from app.models.device import Device
+from app.models.platform import PlatformSettings
 from app.models.point import Point
-from app.models.subitem import Subitem, UserSubitem  # noqa: F401  (re-exported via __all__)
-from app.models.timeseries import SensorFeature, SensorRaw
+from app.models.reading import Reading
+from app.models.sensor import Sensor
+from app.models.subitem import Subitem, UserSubitem
 from app.models.user import User
 
 __all__ = [
     "Alert",
     "AnalysisJob",
     "Base",
+    "Channel",
     "Device",
+    "PlatformSettings",
     "Point",
+    "Reading",
+    "Sensor",
     "Subitem",
-    "SensorFeature",
-    "SensorRaw",
     "User",
-    "UserProject",
+    "UserSubitem",
 ]

@@ -16,7 +16,7 @@ class AnalysisJob(Base):
     __tablename__ = "analysis_jobs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    point_id: Mapped[int] = mapped_column(ForeignKey("points.id"), nullable=False)
+    channel_id: Mapped[int] = mapped_column(ForeignKey("channels.id"), nullable=False)
     plugin: Mapped[str] = mapped_column(String(64), nullable=False)  # e.g. "fft"
     params: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")

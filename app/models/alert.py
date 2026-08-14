@@ -12,7 +12,7 @@ class Alert(Base):
     __tablename__ = "alerts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    point_id: Mapped[int] = mapped_column(ForeignKey("points.id"), nullable=False)
+    channel_id: Mapped[int] = mapped_column(ForeignKey("channels.id"), nullable=False)
     alert_type: Mapped[str | None] = mapped_column(String(32))  # threshold, fft, trend...
     level: Mapped[str | None] = mapped_column(String(16))  # info, warning, danger
     message: Mapped[str | None] = mapped_column(Text)

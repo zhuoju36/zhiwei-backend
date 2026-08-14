@@ -12,7 +12,7 @@ from app.services import notification_service
 
 SAMPLE: AlertPayload = {
     "alert_id": 1,
-    "point_id": 1,
+    "channel_id": 1,
     "subitem_id": 1,
     "level": "warning",
     "value": 0.99,
@@ -20,7 +20,7 @@ SAMPLE: AlertPayload = {
     "message": "超阈值",
     "started_at": "2026-08-13T12:00:00+00:00",
     "device_code": "GW-001",
-    "point_code": "ACC-X",
+    "channel_code": "ACC-X",
 }
 
 

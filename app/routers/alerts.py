@@ -12,16 +12,11 @@ from app.dependencies import (
     check_subitem_access,
     check_subitem_admin,
 )
-from app.models.device import Device
-from app.models.point import Point
+from app.models.channel import Channel
 from app.schemas.alert import AlertOut
 from app.schemas.base import PageSchema
-from app.services.alert_service import (
-    acknowledge_alert,
-    get_alert,
-    list_alerts,
-    to_out_dict,
-)
+from app.services import alert_service
+from app.services.data_service import check_channel_subitem
 
 router = create_router(prefix="/alerts", tags=["告警"])
 
@@ -30,8 +25,8 @@ router = create_router(prefix="/alerts", tags=["告警"])
 async def list_alerts_api(
     db: DbSession,
     current_user: CurrentUser,
-    subitem_id: int | None = Query(None, description="按项目筛选"),
-    point_id: int | None = Query(None, description="按测点筛选"),
+    subitem_id: int | None = Query(None, description="按子项筛选"),
+    channel_id: int | None = Query(None, description="按通道筛选"),
     level: AlertLevel | None = Query(None),
     is_resolved: bool | None = Query(None),
     start: datetime | None = Query(None, description="告警开始时间下界"),
@@ -39,55 +34,45 @@ async def list_alerts_api(
     page: int = Query(1, ge=1),
     size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
 ) -> PageSchema[dict]:
-    # 权限：subitem_id 必须可见；point_id 必须属于可见项目
     if subitem_id is not None:
         await check_subitem_access(db, current_user, subitem_id)
-    elif point_id is not None:
-        point = await db.get(Point, point_id)
-        if point is None:
-            from app.core.exceptions import BizException
+    elif channel_id is not None:
+        subitem_id = await check_channel_subitem(channel_id)
+        await check_subitem_access(db, current_user, subitem_id)
 
-            raise BizException(code="POINT_NOT_FOUND", message="测点不存在", status_code=404)
-        device = await db.get(Device, point.device_id)
-        await check_subitem_access(db, current_user, device.subitem_id)
-
-    from app.schemas.alert import AlertListQuery
-
-    rows, total = await list_alerts(
+    rows, total = await alert_service.list_alerts(
         db,
-        AlertListQuery(
-            subitem_id=subitem_id,
-            point_id=point_id,
-            level=level,
-            is_resolved=is_resolved,
-            start=start,
-            end=end,
-            page=page,
-            size=size,
-        ),
+        subitem_id=subitem_id,
+        channel_id=channel_id,
+        level=level,
+        is_resolved=is_resolved,
+        start=start,
+        end=end,
+        page=page,
+        size=size,
     )
     return PageSchema(
         total=total,
         page=page,
         size=size,
-        items=[to_out_dict(a) for a in rows],
+        items=[alert_service.to_out_dict(a) for a in rows],
     )
 
 
 @router.get("/{alert_id}")
 async def get_alert_api(alert_id: int, db: DbSession, current_user: CurrentUser) -> dict:
-    alert = await get_alert(db, alert_id)
-    point = await db.get(Point, alert.point_id)
-    device = await db.get(Device, point.device_id)
-    await check_subitem_access(db, current_user, device.subitem_id)
-    return to_out_dict(alert)
+    alert = await alert_service.get_alert(db, alert_id)
+    channel = await db.get(Channel, alert.channel_id)
+    subitem_id = await check_channel_subitem(channel.id)
+    await check_subitem_access(db, current_user, subitem_id)
+    return alert_service.to_out_dict(alert)
 
 
 @router.post("/{alert_id}/acknowledge", response_model=AlertOut)
 async def acknowledge_alert_api(alert_id: int, db: DbSession, current_user: CurrentUser) -> dict:
-    alert = await get_alert(db, alert_id)
-    point = await db.get(Point, alert.point_id)
-    device = await db.get(Device, point.device_id)
-    await check_subitem_admin(db, current_user, device.subitem_id)
-    updated = await acknowledge_alert(db, alert_id, current_user.id)
-    return to_out_dict(updated)
+    alert = await alert_service.get_alert(db, alert_id)
+    channel = await db.get(Channel, alert.channel_id)
+    subitem_id = await check_channel_subitem(channel.id)
+    await check_subitem_admin(db, current_user, subitem_id)
+    updated = await alert_service.acknowledge_alert(db, alert_id, current_user.id)
+    return alert_service.to_out_dict(updated)

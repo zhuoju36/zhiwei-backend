@@ -10,9 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BizException
 from app.models.alert import Alert
+from app.models.channel import Channel
 from app.models.device import Device
 from app.models.point import Point
-from app.schemas.alert import AlertListQuery
+from app.models.sensor import Sensor
 
 logger = logging.getLogger(__name__)
 
@@ -64,17 +65,11 @@ def evaluate_thresholds(value: float, rules: list[dict[str, Any]] | None) -> lis
 
 async def trigger_alert(
     db: AsyncSession,
-    point_id: int,
+    channel_id: int,
     event: TriggerEvent,
     timestamp: datetime,
 ) -> tuple[Alert, bool]:
-    """维护按 (point_id, level) 唯一活跃告警，含抑制窗口。
-
-    流程：
-    1. 命中未恢复告警 → 更新 value/threshold，返回 (alert, created=False)
-    2. 否则查找抑制窗口（suppress_seconds）内最近一条已恢复告警 →
-       重开（is_resolved=false, ended_at=null, started_at=timestamp），返回 (alert, created=True)
-    3. 否则插入新告警，返回 (alert, created=True)
+    """维护按 (channel_id, level) 唯一活跃告警，含抑制窗口。
 
     返回 (alert, created)。created=True 表示"业务上是一次新告警事件"
     （新建或重开），调用方应触发通知 / WS 推送。
@@ -82,7 +77,7 @@ async def trigger_alert(
     open_alert = (
         await db.execute(
             select(Alert).where(
-                Alert.point_id == point_id,
+                Alert.channel_id == channel_id,
                 Alert.level == event.level,
                 Alert.is_resolved.is_(False),
             )
@@ -95,14 +90,13 @@ async def trigger_alert(
         await db.flush()
         return open_alert, False
 
-    # 抑制窗口：在最近 suppress_seconds 秒内关闭的告警，复用并重开
     if event.suppress_seconds > 0:
         threshold_ts = timestamp - timedelta(seconds=event.suppress_seconds)
         recent = (
             await db.execute(
                 select(Alert)
                 .where(
-                    Alert.point_id == point_id,
+                    Alert.channel_id == channel_id,
                     Alert.level == event.level,
                     Alert.is_resolved.is_(True),
                     Alert.ended_at.is_not(None),
@@ -125,7 +119,7 @@ async def trigger_alert(
 
     msg = event.message or f"{event.operator} {event.threshold} 触发"
     alert = Alert(
-        point_id=point_id,
+        channel_id=channel_id,
         alert_type="threshold",
         level=event.level,
         message=msg,
@@ -138,14 +132,13 @@ async def trigger_alert(
     return alert, True
 
 
-# v0.2 别名：保留以便旧测试/调用点兼容；内部直接走 trigger_alert（无抑制）。
 async def upsert_alert(
     db: AsyncSession,
-    point_id: int,
+    channel_id: int,
     event: TriggerEvent,
     timestamp: datetime,
 ) -> tuple[Alert, bool]:
-    """v0.2 接口：抑制窗口为 0 时的简化版本。"""
+    """v0.2 兼容别名：无抑制（suppress_seconds=0）。"""
     no_suppress = TriggerEvent(
         level=event.level,
         threshold=event.threshold,
@@ -154,17 +147,17 @@ async def upsert_alert(
         message=event.message,
         suppress_seconds=0,
     )
-    return await trigger_alert(db, point_id, no_suppress, timestamp)
+    return await trigger_alert(db, channel_id, no_suppress, timestamp)
 
 
 async def close_open_alerts(
-    db: AsyncSession, point_id: int, level: str, timestamp: datetime
+    db: AsyncSession, channel_id: int, level: str, timestamp: datetime
 ) -> Alert | None:
     """关闭一条未恢复告警（值回到正常范围）。幂等：没有则 no-op。"""
     open_alert = (
         await db.execute(
             select(Alert).where(
-                Alert.point_id == point_id,
+                Alert.channel_id == channel_id,
                 Alert.level == level,
                 Alert.is_resolved.is_(False),
             )
@@ -178,47 +171,58 @@ async def close_open_alerts(
     return open_alert
 
 
-async def list_alerts(db: AsyncSession, query: AlertListQuery) -> tuple[list[Alert], int]:
+async def list_alerts(
+    db: AsyncSession,
+    *,
+    subitem_id: int | None = None,
+    channel_id: int | None = None,
+    level: str | None = None,
+    is_resolved: bool | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    page: int = 1,
+    size: int = 20,
+) -> tuple[list[Alert], int]:
     stmt = select(Alert)
     count_stmt = select(func.count()).select_from(Alert)
 
-    if query.subitem_id is not None:
+    if subitem_id is not None:
         stmt = (
             select(Alert)
-            .join(Point, Point.id == Alert.point_id)
-            .join(Device, Point.device_id == Device.id)
-            .where(Device.subitem_id == query.subitem_id)
+            .join(Channel, Channel.id == Alert.channel_id)
+            .join(Sensor, Sensor.id == Channel.sensor_id)
+            .join(Point, Point.id == Sensor.point_id)
+            .join(Device, Device.id == Point.device_id)
+            .where(Device.subitem_id == subitem_id)
         )
         count_stmt = (
             select(func.count())
             .select_from(Alert)
-            .join(Point, Point.id == Alert.point_id)
-            .join(Device, Point.device_id == Device.id)
-            .where(Device.subitem_id == query.subitem_id)
+            .join(Channel, Channel.id == Alert.channel_id)
+            .join(Sensor, Sensor.id == Channel.sensor_id)
+            .join(Point, Point.id == Sensor.point_id)
+            .join(Device, Device.id == Point.device_id)
+            .where(Device.subitem_id == subitem_id)
         )
 
-    if query.point_id is not None:
-        stmt = stmt.where(Alert.point_id == query.point_id)
-        count_stmt = count_stmt.where(Alert.point_id == query.point_id)
-    if query.level is not None:
-        stmt = stmt.where(Alert.level == query.level.value)
-        count_stmt = count_stmt.where(Alert.level == query.level.value)
-    if query.is_resolved is not None:
-        stmt = stmt.where(Alert.is_resolved.is_(query.is_resolved))
-        count_stmt = count_stmt.where(Alert.is_resolved.is_(query.is_resolved))
-    if query.start is not None:
-        stmt = stmt.where(Alert.started_at >= query.start)
-        count_stmt = count_stmt.where(Alert.started_at >= query.start)
-    if query.end is not None:
-        stmt = stmt.where(Alert.started_at <= query.end)
-        count_stmt = count_stmt.where(Alert.started_at <= query.end)
+    if channel_id is not None:
+        stmt = stmt.where(Alert.channel_id == channel_id)
+        count_stmt = count_stmt.where(Alert.channel_id == channel_id)
+    if level is not None:
+        stmt = stmt.where(Alert.level == level)
+        count_stmt = count_stmt.where(Alert.level == level)
+    if is_resolved is not None:
+        stmt = stmt.where(Alert.is_resolved.is_(is_resolved))
+        count_stmt = count_stmt.where(Alert.is_resolved.is_(is_resolved))
+    if start is not None:
+        stmt = stmt.where(Alert.started_at >= start)
+        count_stmt = count_stmt.where(Alert.started_at >= start)
+    if end is not None:
+        stmt = stmt.where(Alert.started_at <= end)
+        count_stmt = count_stmt.where(Alert.started_at <= end)
 
     total = (await db.execute(count_stmt)).scalar_one()
-    stmt = (
-        stmt.order_by(Alert.started_at.desc())
-        .offset((query.page - 1) * query.size)
-        .limit(query.size)
-    )
+    stmt = stmt.order_by(Alert.started_at.desc()).offset((page - 1) * size).limit(size)
     rows = (await db.execute(stmt)).scalars().all()
     return list(rows), total
 
@@ -244,7 +248,7 @@ async def acknowledge_alert(db: AsyncSession, alert_id: int, user_id: int) -> Al
 def to_out_dict(alert: Alert) -> dict[str, Any]:
     return {
         "id": alert.id,
-        "point_id": alert.point_id,
+        "channel_id": alert.channel_id,
         "alert_type": alert.alert_type,
         "level": alert.level,
         "message": alert.message,

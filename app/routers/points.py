@@ -1,4 +1,4 @@
-"""测点管理路由。"""
+"""测点管理路由（v0.8 起 point = 物理位置，无 unit/sampling_rate/alert_rules）。"""
 
 from fastapi import Query, status
 
@@ -31,7 +31,7 @@ async def list_points(
 ) -> PageSchema[PointOut]:
     if subitem_id is not None:
         await check_subitem_access(db, current_user, subitem_id)
-        points, total = await PointService.list_by_project(db, subitem_id, page, size)
+        points, total = await PointService.list_by_subitem(db, subitem_id, page, size)
     elif device_id is not None:
         device = await DeviceService.get(db, device_id)
         await check_subitem_access(db, current_user, device.subitem_id)

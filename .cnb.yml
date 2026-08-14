@@ -1,0 +1,17 @@
+main:
+  push:
+    - services:
+        - docker
+      stages:
+        # 提取 pyproject.toml 中的版本号，导出为后续阶段可用的环境变量
+        - name: 提取版本号
+          script: printf "%s" "$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)"
+          exports:
+            stdout: APP_VERSION
+        # 同名镜像构建&推送（latest + 版本号双标签）
+        - name: Docker build
+          script: docker build -t ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:latest -t ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:${APP_VERSION} .
+        - name: Docker push
+          script:
+            - docker push ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:latest
+            - docker push ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:${APP_VERSION}

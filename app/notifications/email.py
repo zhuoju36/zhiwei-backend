@@ -27,13 +27,13 @@ def _build_html(payload: dict[str, Any]) -> str:
           <td style="padding: 4px 12px;">#{payload.get("alert_id")}</td>
         </tr>
         <tr>
-          <td style="padding: 4px 12px; color: #666;">项目</td>
+          <td style="padding: 4px 12px; color: #666;">子项</td>
           <td style="padding: 4px 12px;">{payload.get("subitem_id")}</td>
         </tr>
         <tr>
-          <td style="padding: 4px 12px; color: #666;">设备 / 测点</td>
+          <td style="padding: 4px 12px; color: #666;">设备 / 通道</td>
           <td style="padding: 4px 12px;">
-            {payload.get("device_code")} / {payload.get("point_code")}
+            {payload.get("device_code")} / {payload.get("channel_code")}
           </td>
         </tr>
         <tr>
@@ -108,7 +108,7 @@ class EmailChannel:
         if not self.is_enabled():
             return
         level = payload.get("level", "info")
-        subject = f"[SHM] 告警 {level.upper()} - {payload.get('point_code', '')}"
+        subject = f"[SHM] 告警 {level.upper()} - {payload.get('channel_code', '')}"
         html = _build_html(dict(payload))
         try:
             loop = asyncio.get_running_loop()

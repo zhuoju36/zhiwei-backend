@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class AnalysisJobCreate(BaseModel):
-    point_id: int
+    channel_id: int
     plugin: str = Field(min_length=1, max_length=64)
     params: dict[str, Any] = Field(default_factory=dict)
 
@@ -21,7 +21,7 @@ class AnalysisJobOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    point_id: int
+    channel_id: int
     plugin: str
     params: dict[str, Any]
     status: str
