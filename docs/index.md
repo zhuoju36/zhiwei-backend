@@ -23,7 +23,9 @@
 | [api/auth.md](api/auth.md) | 登录、刷新令牌 |
 | [api/subitems.md](api/projects.md) | 子项 CRUD 与用户授权 |
 | [api/devices.md](api/devices.md) | 设备 CRUD |
-| [api/points.md](api/points.md) | 测点 CRUD、alert_rules 字段语义 |
+| [api/points.md](api/points.md) | 测点（物理位置）CRUD |
+| [api/sensors.md](api/sensors.md) | 传感器 CRUD（挂在测点下，仪器元数据） |
+| [api/channels.md](api/channels.md) | 通道 CRUD（挂在传感器下，unit / 采样率 / alert_rules） |
 | [api/protocols.md](api/protocols.md) | 协议元数据 + 各协议 config schema |
 | [api/data.md](api/data.md) | 时序数据批量接入、查询、最新值、WebSocket 订阅、告警事件 |
 | [api/alerts.md](api/alerts.md) | 告警列表 / 详情 / 确认 / 抑制窗口 |

@@ -9,7 +9,7 @@
 ```json
 {
   "id": 1,
-  "point_id": 1,
+  "channel_id": 1,
   "plugin": "fft",
   "params": { "sampling_rate": 100.0 },
   "status": "success",
@@ -50,7 +50,7 @@
 
 ```json
 {
-  "point_id": 1,
+  "channel_id": 1,
   "plugin": "fft",
   "params": { "sampling_rate": 100.0 }
 }
@@ -58,7 +58,7 @@
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
-| `point_id` | 是 | 目标测点 ID |
+| `channel_id` | 是 | 目标通道 ID |
 | `plugin` | 是 | 已注册插件名（v0.4: `fft`） |
 | `params` | 否 | 插件参数；FFT 至少含 `sampling_rate`（Hz） |
 | `params.start` / `params.end` | 否 | ISO8601 时间窗；省略则用全量数据 |
@@ -78,7 +78,7 @@
 | HTTP | code | 说明 |
 |------|------|------|
 | 403 | `FORBIDDEN` | 无子项写权限 |
-| 404 | `POINT_NOT_FOUND` | 测点不存在 |
+| 404 | `POINT_NOT_FOUND` | 通道不存在 |
 | 422 | `PLUGIN_NOT_REGISTERED` | plugin 不在 `AnalyzerRegistry` 内 |
 
 ---
@@ -91,7 +91,7 @@
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
-| `point_id` | — | 按测点过滤 |
+| `channel_id` | — | 按通道过滤 |
 | `plugin` | — | 按插件过滤 |
 | `status` | — | 按状态过滤 |
 | `page` / `size` | 1 / 20 | 分页 |
@@ -187,7 +187,7 @@ TOKEN = "..."
 r = httpx.post(
     "http://localhost:8000/api/v1/analysis/jobs",
     headers={"Authorization": f"Bearer {TOKEN}"},
-    json={"point_id": 1, "plugin": "fft", "params": {"sampling_rate": 100}},
+    json={"channel_id": 1, "plugin": "fft", "params": {"sampling_rate": 100}},
 )
 job_id = r.json()["data"]["job_id"]
 # 等待完成
@@ -216,7 +216,7 @@ plt.plot(data["frequencies"], data["magnitudes"])
 
 1. 在 `app/plugins/analyzers/` 下新建 `<name>_analysis.py`
 2. 继承 `AnalysisPlugin`，设置类属性 `name = "<name>"`
-3. 实现 `async def analyze(self, point_id, time_range, data, config) -> dict`
+3. 实现 `async def analyze(self, channel_id, time_range, data, config) -> dict`
 4. 注册到 registry 自动发现（无需手动登记）
 5. 在 `docs/api/analysis.md` 添加插件说明（参数、结果格式）
 

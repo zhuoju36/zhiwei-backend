@@ -1,4 +1,4 @@
-"""初始化 TimescaleDB：readings hypertable、连续聚合、保留策略（幂等，可重复执行）。
+"""初始化 TimescaleDB：readings hypertable、索引、保留策略（幂等，可重复执行）。
 
 在 alembic upgrade head 之后执行：
     .venv/bin/python -m scripts.init_db

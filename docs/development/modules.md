@@ -86,7 +86,7 @@ Pydantic BaseSettings，从 `.env` 加载（`env_file=".env"`）。`asyncpg_dsn`
 - `CurrentUser = Annotated[User, Depends(get_current_user)]` — JWT 解析 + 用户加载
 - `AdminUser = Annotated[User, Depends(require_admin)]` — 角色校验
 - `verify_api_key` — 边缘网关 `X-API-Key` Header 校验
-- `check_project_access(db, user, project_id)` — 普通用户必须有 `user_subitems` 记录，admin 放行
+- `check_subitem_access(db, user, subitem_id)` — 普通用户必须有 `user_subitems` 记录，admin 放行
 
 OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)`，未带 token 抛 AuthException(401)。
 
@@ -95,11 +95,17 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 ### `app/models/`
 
 - `user.py:User` — `username/email/hashed_password/role/is_active/created_at`
-- `project.py:Project` + `UserProject`（关联表，独立 permission 字段）
-- `device.py:Device` — `project_id/device_code(唯一)/protocol/config(JSONB)/status/last_seen`
-- `point.py:Point` — `device_id/point_code(同 device 内唯一)/position(JSONB)/alert_rules(JSONB)/sampling_rate`
-- `alert.py:Alert` — `point_id/level/value/threshold/started_at/ended_at/is_resolved/resolved_by`
-- `timeseries.py` — `SensorRaw`、`SensorFeature`（`metadata` 字段在 Python 侧为 `metadata_` 避免与 SQLAlchemy `MetaData` 冲突）
+- `subitem.py:Subitem` + `UserSubitem`（关联表，独立 permission 字段）
+- `device.py:Device` — `subitem_id/device_code(唯一)/protocol/config(JSONB)/status/last_seen`
+- `point.py:Point` — `device_id/point_code(同 device 内唯一)/position(JSONB)`（v0.8b：point 仅为物理位置，unit/sampling_rate/alert_rules 下沉到 channel）
+- `sensor.py:Sensor` — `point_id/sensor_code(同 point 内唯一)/model/manufacturer/install_date/last_calibration/metadata_`（v0.8b 新增，仪器元数据）
+- `channel.py:Channel` — `sensor_id/channel_code(同 sensor 内唯一)/channel_type/unit/sampling_rate/position_offset/axis/alert_rules(JSONB)/is_active`（v0.8b 新增，一个 sensor 可有 1-N 个 channel）
+- `reading.py:Reading` — 时序数据（TimescaleDB hypertable）：`(time, channel_id)` 复合主键 / value / quality / metadata_（v0.8b 替代 sensor_raw/sensor_feature）
+- `alert.py:Alert` — `channel_id/level/value/threshold/started_at/ended_at/is_resolved/resolved_by`
+- `analysis.py:AnalysisJob` — `channel_id/plugin/params/status/result_key/result_summary/error`
+- `platform.py:PlatformSettings` — 单行表（`id=1`）：`platform_name/contact_email/description/logo_url`
+
+`metadata` 字段在 Python 侧统一为 `metadata_` 避免与 SQLAlchemy `MetaData` 冲突，Pydantic 侧用 `validation_alias/serialization_alias` 还原为 `metadata`。
 
 所有模型通过 `app/models/__init__.py` 统一导出，供 Alembic autogenerate 自动发现。
 
@@ -108,7 +114,8 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 严格分离 Request / Response 模型：
 
 - `user.py` — `UserCreate / UserUpdate / UserOut / UserLogin / TokenOut / RefreshIn`
-- `project.py` — `ProjectCreate / ProjectUpdate / ProjectOut / ProjectAssignIn`
+- `subitem.py` — `SubitemCreate / SubitemUpdate / SubitemOut / SubitemAssignIn`
+- `sensor.py` — `SensorCreate / SensorOut` + `ChannelCreate / ChannelOut` + `AlertRule`（v0.8b：传感器/通道 Schema 同文件；`AlertRule` 的 operator/level 用 `Field(pattern=...)` 约束）
 - `data.py` — `ReadingIn / DataBatchIngest / TimeSeriesPoint / TimeSeriesOut`
 - `base.py` — `PageParams / PageSchema[T] / ResponseSchema[T]`
 
@@ -124,15 +131,26 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 
 ### `app/services/device_service.py:DeviceService`
 
-- `get(db, id)` / `list_by_project(db, project_id, page, size)` / `create / update / delete`
+- `get(db, id)` / `list_by_subitem(db, subitem_id, page, size)` / `create / update / delete`
 - 创建时校验子项存在 + `device_code` 全局唯一（409 `DEVICE_CODE_EXISTS`）
 
 ### `app/services/point_service.py:PointService`
 
-- `get / list_by_device / list_by_project / create / update / delete`
-- `list_alert_rules_batch(db, point_ids)` — 批量取测点的 `alert_rules`，供告警任务使用，避免 N+1
+- `get / list_by_device / list_by_subitem / create / update / delete`（v0.8b：point 仅为物理位置）
 - 创建时校验 `point_code` 在同 `device_id` 下唯一（409 `POINT_CODE_EXISTS`）
-- `alert_rules` 字段由前端传入 `list[AlertRule]`，存储为 JSONB
+
+### `app/services/sensor_service.py:SensorService`（v0.8b 新增）
+
+- `get / list_by_point / create / update / delete`
+- 创建时校验 `sensor_code` 在同 `point_id` 下唯一（409 `SENSOR_CODE_EXISTS`）
+- 仪器元数据（型号/厂商/校准日期）保留在 sensor 层，多通道共享
+
+### `app/services/channel_service.py:ChannelService`（v0.8b 新增）
+
+- `get / list_by_sensor / list_by_device / create / update / delete`
+- 创建时校验 `channel_code` 在同 `sensor_id` 下唯一（409 `CHANNEL_CODE_EXISTS`）
+- `create` 时将 `alert_rules` 的 Pydantic 子模型序列化为 dict 存 JSONB
+- `list_by_device` 走 `channel → sensor → point → device` JOIN，供设备视图聚合
 
 ### `app/services/alert_service.py`
 
@@ -140,18 +158,18 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 - `evaluate_thresholds(value, rules) -> list[TriggerEvent]` — 单条读数 vs 多个规则
   - 运算符：`gt / lt / ge / le / eq / ne`
   - 规则字段缺失或 operator 非法 → 跳过该规则（不抛错）
-- `upsert_alert(db, point_id, event, ts) -> (Alert, created)` —— 触发/更新 upsert 逻辑：
+- `trigger_alert(db, channel_id, event, ts) -> (Alert, created)` —— 触发/更新 upsert 逻辑：
   - 已存在未恢复告警 → 更新 `value/threshold`，不重置 `started_at`
   - 无 → 创建新告警
-- `close_open_alerts(db, point_id, level, ts)` — 关闭一条未恢复告警（值回到正常），幂等
-- `list_alerts(db, query)` / `get_alert` / `acknowledge_alert` — 列表（支持 project/point/level/resolved/时间窗）、详情、确认（设置 `ended_at/resolved_by/is_resolved`，并发二次确认返回 `409 ALERT_ALREADY_RESOLVED`）
+- `close_open_alerts(db, channel_id, level, ts)` — 关闭一条未恢复告警（值回到正常），幂等
+- `list_alerts(db, query)` / `get_alert` / `acknowledge_alert` — 列表（支持 subitem_id/channel_id/level/is_resolved/时间窗）、详情、确认（设置 `ended_at/resolved_by/is_resolved`，并发二次确认返回 `409 ALERT_ALREADY_RESOLVED`）
 - `to_out_dict(alert)` — 模型 → JSON 安全的 dict
 
-### `app/services/project_service.py:SubitemService`
+### `app/services/subitem_service.py:SubitemService`
 
-- `list_projects(db, user, page, size)` — admin 看全量，普通用户 join `user_subitems` 过滤
-- `get/create/update/delete` — 基础 CRUD
-- `assign_user(db, project_id, user_id, permission)` — 重复授权更新 permission
+- `list_subitems(db, user, page, size)` — admin 看全量，普通用户 join `user_subitems` 过滤
+- `get_subitem / create_subitem / update_subitem / delete_subitem` — 基础 CRUD
+- `assign_user(db, subitem_id, user_id, permission)` — 重复授权更新 permission
 
 ### `app/services/data_service.py`
 
@@ -159,11 +177,11 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 
 - `get_pool()` / `get_redis()` / `close()`
 - `batch_ingest(readings)` — 一次连接内完成编码映射 + COPY + Redis 发布
-- `_resolve_code_map(conn, readings)` — 单 SELECT JOIN 解析所有 device_code/point_code
+- `_resolve_code_map(conn, readings)` — 单 SELECT JOIN 解析所有 device_code/channel_code（device→point→sensor→channel）
 - `_publish_realtime(readings, code_map)` — Redis pipeline 批量 SET + PUBLISH
-- `get_latest(point_id)` — 读 Redis latest
-- `query_timeseries(point_id, start, end, interval)` — 智能路由到 sensor_raw 或 sensor_feature_1min
-- `check_point_project(point_id)` — 路由层权限校验前置
+- `get_latest(channel_id)` — 读 Redis latest
+- `query_timeseries(channel_id, start, end, interval)` — 从 readings 读取
+- `check_channel_subitem(channel_id)` — 路由层权限校验前置
 
 ## API 路由
 
@@ -183,36 +201,64 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 
 ### `app/routers/devices.py`
 
-- `GET /devices?project_id=...` — 按子项分页列表（子项成员可见）
+- `GET /devices?subitem_id=...` — 按子项分页列表（子项成员可见）
 - `POST /devices` — 创建（子项写权限）
 - `GET /devices/{id}` / `PUT /devices/{id}` / `DELETE /devices/{id}`（删除需 admin）
 
 ### `app/routers/points.py`
 
-- `GET /points?project_id=...` 或 `?device_id=...`（二选一）
-- `POST /points` / `GET /points/{id}` / `PUT /points/{id}` / `DELETE /points/{id}`
-- `PUT` 支持更新 `alert_rules`（`list[AlertRule]` 经 Pydantic 子模型校验 operator/level）
+- `GET /points?subitem_id=...` 或 `?device_id=...`（二选一）
+- `POST /points` / `GET /points/{id}` / `PUT /points/{id}` / `DELETE /points/{id}`（删除需 admin）
+
+### `app/routers/sensors.py`（v0.8b 新增）
+
+- `GET /sensors?point_id=...` — 按测点分页列表
+- `POST /sensors` / `GET /sensors/{id}` / `PUT /sensors/{id}` / `DELETE /sensors/{id}`（删除需 admin）
+
+### `app/routers/channels.py`（v0.8b 新增）
+
+- `GET /channels?sensor_id=...` — 按传感器分页列表
+- `POST /channels` / `GET /channels/{id}` / `PUT /channels/{id}` / `DELETE /channels/{id}`（删除需 admin）
+- 写操作沿 `channel → sensor → point → device → subitem` 链校验子项权限
 
 ### `app/routers/alerts.py`
 
-- `GET /alerts` — 列表（分页 + `project_id/point_id/level/is_resolved/start/end` 过滤）
+- `GET /alerts` — 列表（分页 + `subitem_id/channel_id/level/is_resolved/start/end` 过滤）
 - `GET /alerts/{id}` — 详情
 - `POST /alerts/{id}/acknowledge` — 确认（子项 admin 权限）
 
 ### `app/routers/dashboard.py`
 
-- `GET /dashboard/stats?project_id=...` — `{active_alerts, alerts_24h, by_level, project_id}`
-- `GET /dashboard/recent-alerts?project_id=...&limit=10`
+- `GET /dashboard/stats?subitem_id=...` — `{active_alerts, alerts_24h, by_level, subitem_id}`
+- `GET /dashboard/recent-alerts?subitem_id=...&limit=10`
 
 ### `app/routers/data.py`
 
 - `POST /data/ingest` — `X-API-Key` 认证，DataBatchIngest，返回 `{written: n}`
-- `GET /data/timeseries` — JWT 认证，point_id + start/end/interval
-- `GET /data/latest/{point_id}` — JWT 认证，Redis latest
+- `GET /data/timeseries` — JWT 认证，channel_id + start/end/interval
+- `GET /data/latest/{channel_id}` — JWT 认证，Redis latest
+
+### `app/routers/users.py`
+
+- 用户管理，全部需 `AdminUser`：列表 / 创建 / 详情 / 更新 / 启停用
+
+### `app/routers/setup.py`（v0.8 新增）
+
+- `GET /setup/status` — 首次部署状态（是否已初始化）
+- `POST /setup/init-admin` — 无鉴权，创建初始管理员账户
+
+### `app/routers/platform.py`（v0.8 新增）
+
+- `GET /platform` — 平台信息（名称/logo/联系方式）
+- `PUT /platform` — admin 修改平台名称等
+
+### `app/routers/protocols.py`（v0.8 新增）
+
+- `GET /protocols` — 已注册协议适配器元信息（name/version/supports_batch）
 
 ### 占位路由
 
-`users.py / devices.py / points.py / alerts.py / analysis.py / dashboard.py / models.py` —— 已创建 router 与 prefix，等 v0.2+ 补业务。
+`models.py` —— 3D 模型上传/转换（MinIO + 转换任务），router 与 prefix 已建，业务待补。
 
 ## 插件体系
 
@@ -269,10 +315,10 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 - `@shared_task(queue="alerts", max_retries=3) def check_threshold_batch(readings)`
 - 由 `data_service.batch_ingest` 在写入完成后调用（`.delay()`）
 - 处理流程：
-  1. 收集所有涉及的 `point_id`，一次性 JOIN 取出 `alert_rules` 和 `device.project_id`
+  1. 收集所有涉及的 `channel_id`，一次性 JOIN 取出 `alert_rules` 和 `device.subitem_id`（channel→sensor→point→device）
   2. 逐条评估 `evaluate_thresholds`
   3. 触发 upsert / 关闭已存在的 open alert
-  4. 通过 Redis Pub/Sub 向 `project:{id}` 频道推送 `{"type": "data:alert", "payload": {...}}`
+  4. 通过 Redis Pub/Sub 向 `subitem:{id}` 频道推送 `{"type": "data:alert", "payload": {...}}`
 - 测试用 `task_always_eager=True`（`tests/conftest.py` autouse fixture 开启）
 - 文件顶部 `nest_asyncio.apply()` 允许在已有事件循环中运行 `asyncio.run()`（兼容测试异步上下文）
 
@@ -282,15 +328,15 @@ OAuth2 password flow 使用 `OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login",
 
 ### `app/ws/manager.py:ConnectionManager`
 
-- `active_connections: dict[int, list[WebSocket]]` — project_id → 连接列表
+- `active_connections: dict[int, list[WebSocket]]` — subitem_id → 连接列表
 - `init_redis(url)` / `close()`
-- `_broadcast_listener()` — 监听 `project:*` 频道，向本地连接推送；离线/异常连接自动清理
+- `_broadcast_listener()` — 监听 `subitem:*` 频道，向本地连接推送；离线/异常连接自动清理
 - 单例 `manager`，由 `lifespan` 管理
 
 ### `app/ws/endpoints.py:ws_data`
 
 - `/ws/data?token=<access_token>`：手动校验 JWT（WebSocket 不支持 Depends）
-- 接收 `{"type": "cmd:subscribe", "project_id": 1}` 注册订阅
+- 接收 `{"type": "cmd:subscribe", "subitem_id": 1}` 注册订阅
 - 后续 Redis 推送自动转发给该连接
 - 断连时 `manager.disconnect` 清理
 

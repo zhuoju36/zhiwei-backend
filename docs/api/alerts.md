@@ -2,14 +2,14 @@
 
 > v0.8.0 · 更新于 2026-08-13
 
-阈值告警的生命周期由 [Celery `alerts` 队列](architecture.md) 异步驱动：每次 `POST /data/ingest` 完成后，对涉及的测点批量评估 `alert_rules`，触发或关闭 `(point_id, level)` 唯一未恢复告警。
+阈值告警的生命周期由 [Celery `alerts` 队列](architecture.md) 异步驱动：每次 `POST /data/ingest` 完成后，对涉及的通道批量评估 `alert_rules`，触发或关闭 `(channel_id, level)` 唯一未恢复告警。
 
 ## 数据模型
 
 ```json
 {
   "id": 1,
-  "point_id": 1,
+  "channel_id": 1,
   "alert_type": "threshold",
   "level": "warning",
   "message": "超阈值",
@@ -24,7 +24,7 @@
 
 | 字段 | 说明 |
 |------|------|
-| `alert_type` | 当前固定 `"threshold"`；v0.3+ 加 `trend / fft` 等 |
+| `alert_type` | 当前固定 `"threshold"`；v0.9+ 加 `trend / fft` 等 |
 | `level` | `info` / `warning` / `danger` |
 | `started_at` | 首次触发时间（同一 level 持续触发不重置） |
 | `ended_at` | 自动恢复（值回到正常范围）或人工确认时设置 |
@@ -42,14 +42,14 @@
 
 ## GET /api/v1/alerts
 
-分页列出告警。**至少传一个过滤条件**（`project_id` 或 `point_id`），避免全表扫描；admin 不带过滤也会查询全量（用于大屏）。
+分页列出告警。**至少传一个过滤条件**（`subitem_id` 或 `channel_id`），避免全表扫描；admin 不带过滤也会查询全量（用于大屏）。
 
 ### Query
 
 | 参数 | 类型 | 默认 | 说明 |
 |------|------|------|------|
-| `project_id` | int | — | 按子项 |
-| `point_id` | int | — | 按测点 |
+| `subitem_id` | int | — | 按子项 |
+| `channel_id` | int | — | 按通道 |
 | `level` | enum | — | `info` / `warning` / `danger` |
 | `is_resolved` | bool | — | 活跃 / 已恢复 |
 | `start` | datetime | — | 告警 `started_at` 下界 |
@@ -68,7 +68,7 @@
     "items": [
       {
         "id": 1,
-        "point_id": 1,
+        "channel_id": 1,
         "alert_type": "threshold",
         "level": "warning",
         "message": "gt 0.5 触发",
@@ -89,7 +89,7 @@
 | HTTP | code | 说明 |
 |------|------|------|
 | 403 | `FORBIDDEN` | 未被授权访问所属子项 |
-| 404 | `POINT_NOT_FOUND` | `point_id` 不存在 |
+| 404 | `CHANNEL_NOT_FOUND` | `channel_id` 不存在 |
 
 ---
 
@@ -132,14 +132,14 @@
 
 ## WebSocket 实时事件
 
-告警创建 / 关闭时会向 `project:{project_id}` 频道广播：
+告警创建 / 关闭时会向 `subitem:{subitem_id}` 频道广播：
 
 ```json
 {
   "type": "data:alert",
   "payload": {
     "alert_id": 1,
-    "point_id": 1,
+    "channel_id": 1,
     "level": "warning",
     "value": 0.62,
     "threshold": 0.5,
@@ -165,7 +165,7 @@
 # 按子项列出活跃告警
 curl -G http://localhost:8000/api/v1/alerts \
     -H "Authorization: Bearer $TOKEN" \
-    --data-urlencode "project_id=1" \
+    --data-urlencode "subitem_id=1" \
     --data-urlencode "is_resolved=false"
 
 # 确认告警
