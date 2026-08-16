@@ -2,14 +2,22 @@
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
+from app.core.constants import Role
 from app.core.middleware import create_router
 from app.dependencies import CurrentUser, DbSession, check_project_access
 from app.models.alert import Alert
 from app.models.channel import Channel
 from app.models.device import Device
+from app.models.project import Project, UserProject
 from app.models.sensor import Sensor
+from app.schemas.dashboard import (
+    DashboardOverview,
+    DeviceStats,
+    ProjectLocation,
+    ProjectOverviewItem,
+)
 from app.services.alert_service import to_out_dict
 
 router = create_router(prefix="/dashboard", tags=["大屏"])
@@ -111,3 +119,62 @@ async def recent_alerts(
         )
     rows = (await db.execute(stmt)).scalars().all()
     return [to_out_dict(a) for a in rows]
+
+
+@router.get("/overview", response_model=DashboardOverview)
+async def get_overview(
+    db: DbSession,
+    current_user: CurrentUser,
+) -> DashboardOverview:
+    """项目地图聚合：一次返回所有可见项目的元信息 + 设备状态分布。
+
+    - 权限模型与 GET /projects 一致：admin 全量；普通用户仅 UserProject 中授权项目
+    - 不分页、不接受过滤参数
+    - location 为空的项目仍出现在列表中（前端用表格兜底）
+    - device_stats.total 严格等于 online + offline + error 之和
+    """
+    online_expr = func.sum(case((Device.status == "online", 1), else_=0))
+    offline_expr = func.sum(case((Device.status.in_(("offline", "unknown")), 1), else_=0))
+    error_expr = func.sum(case((Device.status == "error", 1), else_=0))
+
+    stmt = (
+        select(
+            Project.id,
+            Project.name,
+            Project.description,
+            Project.location,
+            online_expr.label("online"),
+            offline_expr.label("offline"),
+            error_expr.label("error"),
+        )
+        .outerjoin(Device, Device.project_id == Project.id)
+        .group_by(Project.id)
+        .order_by(Project.id)
+    )
+    if current_user.role != Role.ADMIN:
+        stmt = stmt.join(UserProject, UserProject.project_id == Project.id).where(
+            UserProject.user_id == current_user.id
+        )
+
+    rows = (await db.execute(stmt)).all()
+    projects: list[ProjectOverviewItem] = []
+    for pid, name, description, location, online, offline, error in rows:
+        online_n = int(online or 0)
+        offline_n = int(offline or 0)
+        error_n = int(error or 0)
+        loc_obj = ProjectLocation.model_validate(location) if location is not None else None
+        projects.append(
+            ProjectOverviewItem(
+                id=pid,
+                name=name,
+                description=description,
+                location=loc_obj,
+                device_stats=DeviceStats(
+                    total=online_n + offline_n + error_n,
+                    online=online_n,
+                    offline=offline_n,
+                    error=error_n,
+                ),
+            )
+        )
+    return DashboardOverview(projects=projects)
