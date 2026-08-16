@@ -3,6 +3,7 @@
 import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import numpy as np
 from httpx import AsyncClient
@@ -367,4 +368,228 @@ async def test_channel_count_mismatch_failed(client: AsyncClient, admin_user: di
         assert status == "failed", resp.json()
         assert "需要 1 个通道" in resp.json()["data"]["error"]
     finally:
+        await _cleanup(proj_id, dev_id, channel_id)
+
+
+# ──────────────── 任务取消测试 ────────────────
+
+
+async def _submit_job(client, headers, channel_id, plugin="statistics", params=None) -> int:
+    resp = await client.post(
+        "/api/v1/analysis/jobs",
+        json={"channel_id": channel_id, "plugin": plugin, "params": params or {}},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["data"]["job_id"]
+
+
+async def test_cancel_pending_job(client: AsyncClient, admin_user: dict) -> None:
+    """pending 状态任务可被取消：DB 写 cancelled，revoke 不带 terminate。"""
+    proj_id, dev_id, channel_id, _ = await _make_channel()
+    headers = await login_headers(client, admin_user["username"], admin_user["password"])
+    job_id = await _submit_job(client, headers, channel_id)
+    # eager 模式下任务已执行完毕，重新写回 pending 以模拟「队列中尚未消费」
+    async with AsyncSessionLocal() as db:
+        job = await db.get(AnalysisJob, job_id)
+        job.status = "pending"
+        job.started_at = None
+        job.finished_at = None
+        job.error = None
+        job.result_summary = None
+        job.result_key = None
+        await db.commit()
+    try:
+        with patch("app.tasks.celery_app.celery_app.control.revoke") as mock_revoke:
+            resp = await client.post(f"/api/v1/analysis/jobs/{job_id}/cancel", headers=headers)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()["data"]
+        assert body["job_id"] == job_id
+        assert body["status"] == "cancelled"
+        assert body["previous_status"] == "pending"
+        mock_revoke.assert_called_once_with(f"analysis-{job_id}", terminate=False)
+
+        async with AsyncSessionLocal() as db:
+            job = await db.get(AnalysisJob, job_id)
+        assert job.status == "cancelled"
+        assert job.finished_at is not None
+    finally:
+        await _cleanup(proj_id, dev_id, channel_id)
+
+
+async def test_cancel_running_job(client: AsyncClient, admin_user: dict) -> None:
+    """running 状态任务可被取消：revoke 带 terminate=True。"""
+    proj_id, dev_id, channel_id, _ = await _make_channel()
+    headers = await login_headers(client, admin_user["username"], admin_user["password"])
+    job_id = await _submit_job(client, headers, channel_id)
+    # 把状态模拟成 running
+    async with AsyncSessionLocal() as db:
+        job = await db.get(AnalysisJob, job_id)
+        job.status = "running"
+        job.started_at = datetime.now(UTC)
+        await db.commit()
+    try:
+        with patch("app.tasks.celery_app.celery_app.control.revoke") as mock_revoke:
+            resp = await client.post(f"/api/v1/analysis/jobs/{job_id}/cancel", headers=headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["data"]["previous_status"] == "running"
+        mock_revoke.assert_called_once_with(f"analysis-{job_id}", terminate=True)
+    finally:
+        await _cleanup(proj_id, dev_id, channel_id)
+
+
+async def test_cancel_success_job_rejected(client: AsyncClient, admin_user: dict) -> None:
+    """success 任务不可取消：409。"""
+    proj_id, dev_id, channel_id, _ = await _make_channel()
+    await _seed_readings(channel_id, freq=10.0, sr=100.0)
+    headers = await login_headers(client, admin_user["username"], admin_user["password"])
+    job_id = await _submit_job(client, headers, channel_id)
+    # 等到 success
+    for _ in range(30):
+        resp = await client.get(f"/api/v1/analysis/jobs/{job_id}", headers=headers)
+        if resp.json()["data"]["status"] == "success":
+            break
+        await asyncio.sleep(0.1)
+    try:
+        resp = await client.post(f"/api/v1/analysis/jobs/{job_id}/cancel", headers=headers)
+        assert resp.status_code == 409
+        assert resp.json()["code"] == "ANALYSIS_JOB_NOT_CANCELLABLE"
+    finally:
+        await _cleanup(proj_id, dev_id, channel_id)
+
+
+async def test_cancel_failed_job_rejected(client: AsyncClient, admin_user: dict) -> None:
+    """failed 任务不可取消：409。"""
+    proj_id, dev_id, channel_id, _ = await _make_channel()
+    headers = await login_headers(client, admin_user["username"], admin_user["password"])
+    job_id = await _submit_job(client, headers, channel_id)
+    # eager 模式下 statistics 无数据 → 必失败
+    for _ in range(30):
+        resp = await client.get(f"/api/v1/analysis/jobs/{job_id}", headers=headers)
+        if resp.json()["data"]["status"] == "failed":
+            break
+        await asyncio.sleep(0.1)
+    try:
+        resp = await client.post(f"/api/v1/analysis/jobs/{job_id}/cancel", headers=headers)
+        assert resp.status_code == 409
+        assert resp.json()["code"] == "ANALYSIS_JOB_NOT_CANCELLABLE"
+    finally:
+        await _cleanup(proj_id, dev_id, channel_id)
+
+
+async def test_cancel_already_cancelled_rejected(client: AsyncClient, admin_user: dict) -> None:
+    """二次取消 → 409。"""
+    proj_id, dev_id, channel_id, _ = await _make_channel()
+    headers = await login_headers(client, admin_user["username"], admin_user["password"])
+    job_id = await _submit_job(client, headers, channel_id)
+    async with AsyncSessionLocal() as db:
+        job = await db.get(AnalysisJob, job_id)
+        job.status = "cancelled"
+        job.finished_at = datetime.now(UTC)
+        await db.commit()
+    try:
+        resp = await client.post(f"/api/v1/analysis/jobs/{job_id}/cancel", headers=headers)
+        assert resp.status_code == 409
+        assert resp.json()["code"] == "ANALYSIS_JOB_NOT_CANCELLABLE"
+    finally:
+        await _cleanup(proj_id, dev_id, channel_id)
+
+
+async def test_cancel_nonexistent(client: AsyncClient, admin_user: dict) -> None:
+    headers = await login_headers(client, admin_user["username"], admin_user["password"])
+    resp = await client.post("/api/v1/analysis/jobs/99999999/cancel", headers=headers)
+    assert resp.status_code == 404
+    assert resp.json()["code"] == "ANALYSIS_JOB_NOT_FOUND"
+
+
+async def test_cancel_requires_write_access(client: AsyncClient, admin_user: dict) -> None:
+    """无项目写权限的普通用户取消 → 403。"""
+    from app.core.constants import Role
+    from app.core.security import hash_password
+    from app.models.user import User
+
+    proj_id, dev_id, channel_id, _ = await _make_channel()
+    headers = await login_headers(client, admin_user["username"], admin_user["password"])
+    job_id = await _submit_job(client, headers, channel_id)
+    # 准备一个无任何项目权限的普通用户
+    name = f"reader_{uuid.uuid4().hex[:8]}"
+    async with AsyncSessionLocal() as db:
+        u = User(
+            username=name,
+            email=f"{name}@example.com",
+            hashed_password=await hash_password("user12345"),
+            role=Role.USER.value,
+        )
+        db.add(u)
+        await db.commit()
+        user_id = u.id
+    try:
+        login = await client.post(
+            "/api/v1/auth/login",
+            data={"username": name, "password": "user12345"},
+        )
+        user_headers = {"Authorization": f"Bearer {login.json()['data']['access_token']}"}
+        resp = await client.post(f"/api/v1/analysis/jobs/{job_id}/cancel", headers=user_headers)
+        assert resp.status_code == 403, resp.text
+        assert resp.json()["code"] == "FORBIDDEN"
+    finally:
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(AnalysisJob).where(AnalysisJob.id == job_id))
+            u = await db.get(User, user_id)
+            if u is not None:
+                await db.delete(u)
+                await db.commit()
+        await _cleanup(proj_id, dev_id, channel_id)
+
+
+async def test_cancel_does_not_overwrite_with_success(
+    client: AsyncClient, admin_user: dict
+) -> None:
+    """协作守卫：analyze() 完成后若 DB 已被置为 cancelled，结果不应被覆盖回 success。"""
+    from sqlalchemy import select
+
+    from app.plugins.analyzers.base import AnalysisInput, AnalysisOutput, AnalysisPlugin
+    from app.plugins.analyzers.registry import AnalyzerRegistry
+
+    class _CancelSelfPlugin(AnalysisPlugin):
+        """模拟「运行中被外部取消」：在 analyze() 内部把当前 job 状态置 cancelled。"""
+
+        name = "_cancel_self"
+        input_channels = 1
+        min_samples = 1
+
+        async def analyze(self, data: AnalysisInput, config: dict) -> AnalysisOutput:
+            # 按 channel_id 反查最近的任务并自取消（模拟外部撤销）
+            async with AsyncSessionLocal() as db:
+                stmt = (
+                    select(AnalysisJob)
+                    .where(AnalysisJob.channel_id == data.channel_ids[0])
+                    .order_by(AnalysisJob.id.desc())
+                    .limit(1)
+                )
+                job = (await db.execute(stmt)).scalar_one()
+                job.status = "cancelled"
+                job.finished_at = datetime.now(UTC)
+                await db.commit()
+            return AnalysisOutput(summary={"would_have_been": "success"})
+
+    AnalyzerRegistry._analyzers["_cancel_self"] = _CancelSelfPlugin
+    try:
+        proj_id, dev_id, channel_id, _ = await _make_channel()
+        await _seed_readings(channel_id, freq=5.0, sr=100.0)
+        headers = await login_headers(client, admin_user["username"], admin_user["password"])
+        resp = await client.post(
+            "/api/v1/analysis/jobs",
+            json={"channel_id": channel_id, "plugin": "_cancel_self", "params": {}},
+            headers=headers,
+        )
+        assert resp.status_code == 201, resp.text
+        job_id = resp.json()["data"]["job_id"]
+        resp = await client.get(f"/api/v1/analysis/jobs/{job_id}", headers=headers)
+        # 终态必须是 cancelled，不被覆盖为 success
+        assert resp.json()["data"]["status"] == "cancelled"
+        assert resp.json()["data"]["result_summary"] is None
+        assert resp.json()["data"]["result_key"] is None
+    finally:
+        AnalyzerRegistry._analyzers.pop("_cancel_self", None)
         await _cleanup(proj_id, dev_id, channel_id)

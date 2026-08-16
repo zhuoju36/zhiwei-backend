@@ -70,9 +70,39 @@ async def list_jobs(
 
 async def mark_running(db: AsyncSession, job_id: int) -> None:
     job = await get_job(db, job_id)
+    if job.status != "pending":
+        # 任务已被取消（外部置为 cancelled）或状态异常；
+        # 抛 BizException 由 Celery 任务层捕获并转为 Ignore，避免触发重试。
+        raise BizException(
+            code="ANALYSIS_JOB_NOT_RUNNING",
+            message=f"任务状态为 {job.status}，无法进入 running",
+            status_code=409,
+        )
     job.status = "running"
     job.started_at = datetime.now(UTC)
     await db.flush()
+
+
+CANCELLABLE_STATUSES = frozenset({"pending", "running"})
+
+
+async def cancel_job(db: AsyncSession, job_id: int) -> str:
+    """将任务置为 cancelled，返回取消前的状态（pending/running）。
+
+    仅 pending / running 状态可被取消；其它状态抛 409。
+    """
+    job = await get_job(db, job_id)
+    if job.status not in CANCELLABLE_STATUSES:
+        raise BizException(
+            code="ANALYSIS_JOB_NOT_CANCELLABLE",
+            message=f"任务不可取消（当前 status={job.status}）",
+            status_code=409,
+        )
+    previous_status = job.status
+    job.status = "cancelled"
+    job.finished_at = datetime.now(UTC)
+    await db.flush()
+    return previous_status
 
 
 async def mark_success(

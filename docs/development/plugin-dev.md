@@ -170,3 +170,4 @@ asyncio.run(main())
 - **插件没出现在 `/analysis/plugins`**：检查类是否继承 `AnalysisPlugin`、`name` 是否重复、`plugin_api_version` 是否匹配
 - **任务一直 failed**：`GET /analysis/jobs/{id}` 的 `error` 字段有具体原因；参数校验失败时确认 `ValueError` 消息
 - **多通道数据长度不一致**：框架不强行对齐，插件自行处理（可 `min` 截断或重采样）
+- **任务被取消后状态被覆盖为 success**：v0.8d 起 `_run` 在 `analyze()` 返回后、上传附件 / `mark_success` 之前会重新读取 job 状态；插件内部不应自行改写 `status` 字段，若有并发取消需求应通过业务接口完成

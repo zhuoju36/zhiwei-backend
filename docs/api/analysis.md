@@ -4,6 +4,8 @@
 
 异步分析任务链路：用户提交任务 → Celery `analysis` 队列消费 → 插件计算 → 结果存 MinIO + 摘要回写数据库。内置插件：**FFT**（频谱分析，v0.4）、**statistics**（基础统计，v0.8d）；第三方插件经 Python entry_points（组 `shm_analyzers`）自动发现，详见 [插件开发指南](../development/plugin-dev.md)。
 
+**状态机**：`pending → running → success` 或 `pending → running → failed`；新增 `pending|running → cancelled`（v0.8d）。取消接口走 `POST /analysis/jobs/{id}/cancel`，协作守卫保证已取消的任务不会在插件完成后被回写为 `success`。
+
 ## 数据模型
 
 ```json
@@ -37,6 +39,7 @@
 |------|-------|-----------|-----------|------|
 | `GET /analysis/plugins`（插件列表） | ✓ | ✓ | ✓ | ✗ |
 | `POST /analysis/jobs`（提交） | ✓ | ✓ | ✗ | ✗ |
+| `POST /analysis/jobs/{id}/cancel`（取消） | ✓ | ✓ | ✗ | ✗ |
 | `GET /analysis/jobs`（列表） | ✓ | ✓（限可见项目） | ✓ | ✗ |
 | `GET /analysis/jobs/{id}`（详情） | ✓ | ✓ | ✓ | ✗ |
 | `GET /analysis/jobs/{id}/result`（下载附件） | ✓ | ✓ | ✓ | ✗ |
@@ -190,6 +193,44 @@ Content-Disposition: attachment; filename="<插件 artifact_name>"
 | 409 | `ANALYSIS_RESULT_NOT_READY` | 任务未完成（status≠success） |
 
 ---
+
+## POST /api/v1/analysis/jobs/{job_id}/cancel
+
+取消 `pending` 或 `running` 状态的分析任务。running 状态会通过 Celery `revoke(terminate=True)` 终止 worker 中的任务；插件完成后协作守卫保证不会把结果覆盖回写为 `success`。
+
+### 请求
+
+无需 body。
+
+### 响应 200
+
+```json
+{
+  "code": "OK",
+  "data": {
+    "job_id": 42,
+    "status": "cancelled",
+    "previous_status": "running"
+  }
+}
+```
+
+`previous_status` 是取消前的状态：`pending` 表示从队列移除消息，`running` 表示已发送 SIGTERM 终止 worker 中的任务。
+
+### 错误
+
+| HTTP | code | 说明 |
+|------|------|------|
+| 403 | `FORBIDDEN` | 无项目写权限 |
+| 404 | `ANALYSIS_JOB_NOT_FOUND` | 任务不存在 |
+| 409 | `ANALYSIS_JOB_NOT_CANCELLABLE` | 任务状态非 pending/running（已是 success / failed / cancelled） |
+
+### 协作守卫说明
+
+`running` 状态下撤销时存在两种竞态：
+
+1. **撤销时正在执行插件**：worker 进程被 SIGTERM 终止，DB 终态为 `cancelled`
+2. **撤销时插件恰好完成**：`_run` 末尾的协作守卫会重新读取 job 状态，发现已是 `cancelled` 后跳过附件上传与 `mark_success`，保证终态不会被覆盖
 
 ## FFT 插件说明
 

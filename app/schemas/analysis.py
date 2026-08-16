@@ -45,3 +45,11 @@ class AnalysisPluginMeta(BaseModel):
     min_samples: int
     params_schema: dict[str, Any]
     result_view: str
+
+
+class AnalysisCancelOut(BaseModel):
+    """分析任务取消响应。"""
+
+    job_id: int
+    status: str  # 恒为 "cancelled"
+    previous_status: str  # 取消前的状态："pending" | "running"

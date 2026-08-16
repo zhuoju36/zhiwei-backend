@@ -1,5 +1,6 @@
-"""分析路由：任务提交、查询、结果下载。"""
+"""分析路由：任务提交、查询、结果下载、取消。"""
 
+import logging
 import mimetypes
 
 from fastapi import Query
@@ -15,6 +16,7 @@ from app.dependencies import (
 )
 from app.models.channel import Channel
 from app.schemas.analysis import (
+    AnalysisCancelOut,
     AnalysisJobCreate,
     AnalysisJobOut,
     AnalysisPluginMeta,
@@ -24,7 +26,16 @@ from app.schemas.base import PageSchema
 from app.services import analysis_service
 from app.services.data_service import check_channel_project
 from app.tasks.analysis_tasks import run_analysis_job
+from app.tasks.celery_app import celery_app
 from app.utils import minio_client
+
+logger = logging.getLogger(__name__)
+
+
+def _celery_task_id(job_id: int) -> str:
+    """Celery 任务 ID 与业务 job_id 一一对应，便于按业务 ID 直接 revoke。"""
+    return f"analysis-{job_id}"
+
 
 router = create_router(prefix="/analysis", tags=["分析"])
 
@@ -72,10 +83,34 @@ async def submit_job(
     )
     await db.commit()
     try:
-        run_analysis_job.delay(job.id)
+        run_analysis_job.apply_async(args=[job.id], task_id=_celery_task_id(job.id))
     except Exception:
-        pass
+        # broker 不可用：任务停留在 pending，由 cancel 流程或人工介入清理
+        logger.exception("分发分析任务失败: job_id=%s", job.id)
     return AnalysisSubmitOut(job_id=job.id, status=job.status)
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=AnalysisCancelOut)
+async def cancel_job(
+    job_id: int,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> AnalysisCancelOut:
+    """取消 pending 或 running 的分析任务。
+
+    - pending：从队列移除（revoke without terminate）
+    - running：终止 worker 中的任务（revoke with terminate=True）；插件完成后
+      协作守卫保证不会把结果覆盖回写为 success
+    - success / failed / cancelled：409
+    """
+    job = await analysis_service.get_job(db, job_id)
+    channel = await db.get(Channel, job.channel_id)
+    project_id = await check_channel_project(channel.id)
+    await check_project_write_access(db, current_user, project_id)
+    previous_status = await analysis_service.cancel_job(db, job_id)
+    await db.commit()
+    celery_app.control.revoke(_celery_task_id(job_id), terminate=(previous_status == "running"))
+    return AnalysisCancelOut(job_id=job_id, status="cancelled", previous_status=previous_status)
 
 
 @router.get("/jobs", response_model=PageSchema[AnalysisJobOut])

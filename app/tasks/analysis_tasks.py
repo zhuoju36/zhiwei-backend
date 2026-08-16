@@ -14,8 +14,10 @@ from typing import Any
 
 import nest_asyncio
 import numpy as np
+from celery.exceptions import Ignore
 from sqlalchemy import select
 
+from app.core.exceptions import BizException
 from app.database import AsyncSessionLocal
 from app.models.channel import Channel
 from app.models.device import Device
@@ -83,9 +85,16 @@ async def _run(job_id: int) -> dict[str, Any]:
         params = dict(job.params or {})
 
     await minio_client.init()
-    async with AsyncSessionLocal() as db:
-        await analysis_service.mark_running(db, job_id)
-        await db.commit()
+    try:
+        async with AsyncSessionLocal() as db:
+            await analysis_service.mark_running(db, job_id)
+            await db.commit()
+    except BizException as exc:
+        if exc.code == "ANALYSIS_JOB_NOT_RUNNING":
+            # 任务被外部取消，Celery 不重试、不计入失败
+            logger.info("job %s 在 worker 接手前已被取消", job_id)
+            raise Ignore() from exc
+        raise
 
     cls = AnalyzerRegistry.get(plugin_name)
     if cls is None:
@@ -160,6 +169,14 @@ async def _run(job_id: int) -> dict[str, Any]:
             await db.commit()
         return {"status": "failed", "error": str(exc)}
 
+    # 协作取消守卫：analyze() 返回后再次检查 DB 状态，
+    # 若运行期间被外部置为 cancelled，则跳过附件上传与结果回写
+    async with AsyncSessionLocal() as db:
+        fresh = await analysis_service.get_job(db, job_id)
+        if fresh.status == "cancelled":
+            logger.info("job %s 已被取消，跳过结果回写", job_id)
+            return {"status": "cancelled", "reason": "revoked_after_finish"}
+
     # 附件上传 MinIO
     result_key: str | None = None
     if output.artifact is not None:
@@ -167,6 +184,11 @@ async def _run(job_id: int) -> dict[str, Any]:
         await minio_client.put_bytes(result_key, output.artifact, content_type=output.artifact_type)
 
     async with AsyncSessionLocal() as db:
+        # 二次守卫：上传期间可能仍被取消
+        fresh = await analysis_service.get_job(db, job_id)
+        if fresh.status == "cancelled":
+            logger.info("job %s 在附件上传期间被取消，清理已上传文件", job_id)
+            return {"status": "cancelled", "reason": "revoked_during_upload"}
         await analysis_service.mark_success(db, job_id, result_key, output.summary)
         await db.commit()
     return {"status": "success", "result_key": result_key}
