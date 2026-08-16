@@ -1,0 +1,8 @@
+version = 1
+revision = 3
+requires-python = ">=3.11"
+
+[[package]]
+name = "shm-backend"
+version = "0.9.3"
+source = { virtual = "." }
